@@ -80,6 +80,11 @@ main{padding:16px;max-width:1100px;margin:0 auto}
 .daterow{display:flex;gap:6px;position:relative}
 .daterow input[type=text]{flex:1}
 .dp-popup{position:absolute;z-index:70;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.22);padding:7px;width:205px;display:none}
+.menu-popup{position:absolute;z-index:70;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.22);display:none;overflow:hidden;min-width:170px}
+.menu-popup.show{display:block}
+.menu-popup .mi{padding:11px 15px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+.menu-popup .mi:hover{background:var(--brand-lt)}
+.menu-popup .mi+.mi{border-top:1px solid var(--line)}
 .dp-popup.show{display:block}
 .dp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
 .dp-head button{background:none;border:none;font-size:14px;cursor:pointer;color:var(--brand-dk);padding:1px 7px;border-radius:5px}
@@ -145,7 +150,7 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
     <div class="summary-strip" id="rentSummaryStrip"></div>
     <div class="toolbar">
       <input type="text" id="rentSearch" placeholder="Search tenant, property, mobile...">
-      <button class="btn secondary" onclick="openConsolidatedRentPdf()">View/PDF</button>
+      <button class="btn secondary" onclick="openReportScope('rent')">View/PDF</button>
       <button class="btn" onclick="openRentForm()">+ Add Tenant</button>
     </div>
     <div id="rentList"></div>
@@ -155,7 +160,7 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
   <section id="sec-property" class="section">
     <div class="toolbar">
       <input type="text" id="propSearch" placeholder="Search property, address...">
-      <button class="btn secondary" onclick="openConsolidatedPropertyPdf()">View/PDF</button>
+      <button class="btn secondary" onclick="openReportScope('property')">View/PDF</button>
       <button class="btn" onclick="openPropertyForm()">+ Add Property</button>
     </div>
     <div id="propList"></div>
@@ -185,14 +190,48 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
 <footer>Powered by A.S.M Consultancy Service · Chidambaram</footer>
 <div class="toast" id="toast"></div>
 <div class="dp-popup" id="dpPopup"></div>
+<div class="menu-popup" id="menuPopup"></div>
 
 <!-- ============ CONFIRM MODAL (used for all deletes) ============ -->
 <div class="modal-bg" id="confirmBg"><div class="modal" style="max-width:380px">
-  <h2>Confirm Delete</h2>
+  <h2 id="confirmTitle">Confirm Delete</h2>
   <p class="sub" id="confirmMsg"></p>
   <div class="modal-actions">
     <button class="btn secondary" onclick="closeModal('confirmBg')">Cancel</button>
-    <button class="btn danger" onclick="runConfirmedAction()">Delete</button>
+    <button class="btn danger" id="confirmOkBtn" onclick="runConfirmedAction()">Delete</button>
+  </div>
+</div></div>
+
+<!-- ============ REPORT SCOPE MODAL (used by both View/PDF toolbar buttons) ============ -->
+<div class="modal-bg" id="reportScopeBg" style="align-items:center"><div class="modal" style="max-width:360px">
+  <h2 id="reportScopeTitle">Report Scope</h2>
+  <div class="field"><label>Scope</label>
+    <select id="reportScopeMode" onchange="toggleReportScopeMode()">
+      <option value="all">All Properties</option>
+      <option value="location">By Location</option>
+      <option value="property">By Property</option>
+    </select>
+  </div>
+  <div class="field" id="reportScopeLocationWrap" style="display:none">
+    <label>Location</label>
+    <div class="searchsel"><input type="text" id="reportScopeLocationSearch" placeholder="Type location..." oninput="filterTypeOptsGeneric('reportScopeLocationSearch','reportScopeLocationVal','reportScopeLocationOpts','location')" onfocus="filterTypeOptsGeneric('reportScopeLocationSearch','reportScopeLocationVal','reportScopeLocationOpts','location')">
+      <input type="hidden" id="reportScopeLocationVal">
+      <div class="opts" id="reportScopeLocationOpts"></div>
+    </div>
+  </div>
+  <div class="field" id="reportScopePropertyWrap" style="display:none">
+    <label>Property</label>
+    <div class="searchsel"><input type="text" id="reportScopePropSearch" placeholder="Type property name..." oninput="filterReportScopeProps()" onfocus="filterReportScopeProps()">
+      <input type="hidden" id="reportScopePropVal">
+      <div class="opts" id="reportScopePropOpts"></div>
+    </div>
+  </div>
+  <div class="modal-actions" style="justify-content:space-between">
+    <button class="btn secondary" id="reportScopeVacateHistoryBtn" onclick="generateScopedVacateHistory()" style="display:none">Vacate History</button>
+    <div style="display:flex;gap:8px;margin-left:auto">
+      <button class="btn secondary" onclick="closeModal('reportScopeBg')">Cancel</button>
+      <button class="btn" onclick="generateScopedReport()">Generate PDF</button>
+    </div>
   </div>
 </div></div>
 
@@ -202,6 +241,12 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
   <input type="hidden" id="propId">
   <div class="field"><label>Property Name <span class="req">*</span> (must be unique)</label><input type="text" id="propName"></div>
   <div class="field"><label>Address <span class="req">*</span></label><textarea id="propAddress"></textarea></div>
+  <div class="field"><label>Location</label>
+    <div class="searchsel"><input type="text" id="propLocationSearch" placeholder="Type or add a location (e.g. Cuddalore)..." oninput="filterTypeOptsGeneric('propLocationSearch','propLocation','propLocationOpts','location')" onfocus="filterTypeOptsGeneric('propLocationSearch','propLocation','propLocationOpts','location')">
+      <input type="hidden" id="propLocation">
+      <div class="opts" id="propLocationOpts"></div>
+    </div>
+  </div>
   <div class="field"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)"><input type="checkbox" id="propOwnOcc" style="width:auto"> Own Occupation (owner-occupied — no rent tenant, won't appear in Rent module)</label></div>
 
   <div class="field"><label>Linked Property? (shares Tax/Water/Drainage No. with a Main property — e.g. Ground Floor & First Floor of the same building)</label>
@@ -395,8 +440,23 @@ function saveProps(a){return saveToStorage(LS_PROP,a)}
 function loadRents(){return JSON.parse(localStorage.getItem(LS_RENT)||'[]')}
 function saveRents(a){return saveToStorage(LS_RENT,a)}
 function uid(){return 'id'+Date.now()+Math.floor(Math.random()*10000)}
+/* Safe output helpers: esc() for text/attributes placed in innerHTML, jsq() for a value passed as a JS string inside an onclick="" attribute */
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function jsq(s){ return esc(JSON.stringify(String(s==null?'':s))); }
 
 function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.classList.toggle('error',!!isError);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?4500:2200)}
+function openTenantFile(rentId, idx){
+  const r=loadRents().find(x=>x.id===rentId);
+  const f=r && r.files && r.files[idx];
+  if(!f){ toast('File not found', true); return; }
+  const w=window.open('', '_blank');
+  if(!w){ toast('Could not open the file — check your browser popup settings.', true); return; }
+  if(f.type && f.type.startsWith('image/')){
+    w.document.write(`<title>${esc(f.name)}</title><body style="margin:0;background:#111"><img src="${f.dataUrl}" style="max-width:100%;display:block;margin:auto"></body>`);
+  } else {
+    w.location.href = f.dataUrl;
+  }
+}
 function saveToStorage(key,arr){
   try{ localStorage.setItem(key, JSON.stringify(arr)); return true; }
   catch(e){
@@ -460,13 +520,31 @@ function dpSelect(day){
 }
 function dpToday(){ document.getElementById(dpTargetField).value=todayDMY(); closeDatePicker(); }
 function closeDatePicker(){ document.getElementById('dpPopup').classList.remove('show'); dpTargetField=null; }
+
+/* ---- Small action dropdown menu (used by View PDF / Download on Tenant and Property screens) ---- */
+function openMenuPopup(evt, items){
+  evt.stopPropagation();
+  const menu=document.getElementById('menuPopup');
+  menu.innerHTML = items.map(it=>`<div class="mi" onclick="closeMenuPopup();${it.action}">${esc(it.label)}</div>`).join('');
+  const rect=evt.currentTarget.getBoundingClientRect();
+  let left = window.scrollX + rect.left;
+  const menuW = 190;
+  if(left + menuW > window.scrollX + window.innerWidth - 8) left = window.scrollX + window.innerWidth - menuW - 8;
+  menu.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+  menu.style.left = left + 'px';
+  menu.classList.add('show');
+}
+function closeMenuPopup(){ document.getElementById('menuPopup').classList.remove('show'); }
+document.addEventListener('click',(e)=>{ if(!e.target.closest('#menuPopup') && !e.target.closest('.menu-trigger')) closeMenuPopup(); });
 document.addEventListener('click', function(e){
   if(dpTargetField && !e.target.closest('#dpPopup') && !e.target.closest('.cal')) closeDatePicker();
 });
 
 /* ---- Generic delete confirmation ---- */
 let confirmCallback=null;
-function askConfirm(msg, cb){
+function askConfirm(msg, cb, okLabel, title){
+  document.getElementById('confirmTitle').textContent = title || 'Confirm Delete';
+  document.getElementById('confirmOkBtn').textContent = okLabel || 'Delete';
   document.getElementById('confirmMsg').textContent=msg;
   confirmCallback=cb;
   openModalEl('confirmBg');
@@ -499,7 +577,7 @@ function filterMainPropOpts(){
   const selfId=document.getElementById('propId').value;
   const props=loadProps().filter(p=>p.id!==selfId && !p.linkedTo && p.status!=='Sold').filter(p=>p.name.toLowerCase().includes(q));
   const box=document.getElementById('propMainOpts');
-  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectMainProp('${p.id}')">${p.name}<div class="sm">${p.address}</div></div>`).join('') || '<div class="opt sub">No matching properties</div>';
+  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectMainProp('${p.id}')">${esc(p.name)}<div class="sm">${esc(p.address)}</div></div>`).join('') || '<div class="opt sub">No matching properties</div>';
   box.classList.add('show');
 }
 function selectMainProp(id){
@@ -517,12 +595,16 @@ function openPropertyForm(id){
   document.getElementById('propMainId').value='';
   document.getElementById('propMainSearch').value='';
   document.getElementById('propOwnOcc').checked=false;
+  document.getElementById('propLocationSearch').value='';
+  document.getElementById('propLocation').value='';
   if(id){
     const p=loadProps().find(x=>x.id===id);
     document.getElementById('propName').value=p.name;
     document.getElementById('propAddress').value=p.address;
     document.getElementById('propEB').value=p.ebNumber||'';
     document.getElementById('propOwnOcc').checked=!!p.ownOccupation;
+    document.getElementById('propLocationSearch').value=p.location||'';
+    document.getElementById('propLocation').value=p.location||'';
     editPropMaterials=[...(p.materials||[])];
     editPropTaxNumbers=[...(p.taxNumbers||[])];
     if(p.linkedTo){
@@ -557,7 +639,7 @@ function removePropTaxNumber(id){
 }
 function renderPropTaxNumChips(){
   document.getElementById('propTaxNumChips').innerHTML = editPropTaxNumbers.map(t=>
-    `<span class="chip">${t.type}: ${t.number} <span class="x" onclick="removePropTaxNumber('${t.id}')">×</span></span>`
+    `<span class="chip">${esc(t.type)}: ${esc(t.number)} <span class="x" onclick="removePropTaxNumber('${t.id}')">×</span></span>`
   ).join('') || '<span class="sub">None added yet</span>';
 }
 function addPropertyMaterial(){
@@ -574,7 +656,7 @@ function removePropertyMaterial(id){
 }
 function renderPropMaterialsChips(){
   document.getElementById('propMaterialsChips').innerHTML = editPropMaterials.map(m=>
-    `<span class="chip">${m.name} <span class="x" onclick="removePropertyMaterial('${m.id}')">×</span></span>`
+    `<span class="chip">${esc(m.name)} <span class="x" onclick="removePropertyMaterial('${m.id}')">×</span></span>`
   ).join('') || '<span class="sub">No materials added yet</span>';
 }
 function saveProperty(){
@@ -598,6 +680,7 @@ function saveProperty(){
     id: id||uid(),
     name, address,
     ebNumber: document.getElementById('propEB').value.trim(),
+    location: document.getElementById('propLocationSearch').value.trim(),
     linkedTo: isLinked ? mainId : null,
     ownOccupation: ownOcc,
     taxNumbers: editPropTaxNumbers,
@@ -607,6 +690,7 @@ function saveProperty(){
     soldInfo: existing ? existing.soldInfo : null
   };
   if(id){ props=props.map(p=>p.id===id?data:p) } else { props.push(data) }
+  if(data.location){ const locs=loadLocations(); if(!locs.some(l=>l.toLowerCase()===data.location.toLowerCase())){ locs.push(data.location); saveLocations(locs); } }
   if(!saveProps(props)) return;
   closeModal('propModalBg');
   renderPropList();
@@ -629,19 +713,19 @@ function getLastPaymentForType(prop, type){
 }
 function renderPropList(){
   const q=(document.getElementById('propSearch').value||'').toLowerCase();
-  let props=loadProps().filter(p=> p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q));
+  let props=loadProps().filter(p=> p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
   props.sort((a,b)=>a.name.localeCompare(b.name));
   const el=document.getElementById('propList');
   if(!props.length){el.innerHTML='<div class="empty">No properties yet. Tap "+ Add Property" to start.</div>';return;}
   el.innerHTML = props.map(p=>`
     <div class="card clickable" onclick="viewProperty('${p.id}')">
       <div class="row1">
-        <div class="name">${p.name}</div>
+        <div class="name">${esc(p.name)}</div>
         <span class="badge ${p.status==='Sold'?'closed':'active'}">${p.status}</span>
         ${p.ownOccupation ? '<span class="badge amber">Own Occupation</span>' : ''}
       </div>
-      <div class="sub">${p.address}</div>
-      <div class="sub">EB: ${p.ebNumber||'-'} &nbsp;|&nbsp; Materials: ${(p.materials||[]).length} ${p.linkedTo ? `&nbsp;|&nbsp; <span class="badge active">Portion of: ${(loadProps().find(x=>x.id===p.linkedTo)||{}).name||'(main removed)'}</span>` : ''}</div>
+      <div class="sub">${esc(p.address)}</div>
+      <div class="sub">${p.location?`📍 ${esc(p.location)} &nbsp;|&nbsp; `:''}EB: ${esc(p.ebNumber||'-')} &nbsp;|&nbsp; Materials: ${(p.materials||[]).length} ${p.linkedTo ? `&nbsp;|&nbsp; <span class="badge active">Portion of: ${esc((loadProps().find(x=>x.id===p.linkedTo)||{}).name||'(main removed)')}</span>` : ''}</div>
     </div>`).join('');
 }
 document.getElementById('propSearch').addEventListener('input',renderPropList);
@@ -654,19 +738,19 @@ function viewProperty(id){
   const main = p.linkedTo ? loadProps().find(x=>x.id===p.linkedTo) : null;
   const portions = loadProps().filter(x=>x.linkedTo===p.id);
   const merged = getMergedTaxNumbers(p);
-  const taxNumLines = merged.map(t=>`<div><b>${t.type}:</b> ${t.number}${t.inherited?' <span class="sub">(from Main)</span>':''}</div>`).join('') || '<div class="sub">None added yet</div>';
+  const taxNumLines = merged.map(t=>`<div><b>${esc(t.type)}:</b> ${esc(t.number)}${t.inherited?' <span class="sub">(from Main)</span>':''}</div>`).join('') || '<div class="sub">None added yet</div>';
   const isSold = p.status==='Sold';
   const taxRows=(p.taxPayments||[]).slice().reverse().map(t=>
-    `<tr><td>${t.date}</td><td>${t.type}</td><td>${t.refNo||'-'}</td><td>₹${t.amount}</td><td>${t.mode}</td><td>${t.receipt||'-'}</td><td>${isSold?'':`<span class="x" style="cursor:pointer;color:#8C2F2F" onclick="deleteTaxPayment('${p.id}','${t.id}')">✕</span>`}</td></tr>`
+    `<tr><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td>${esc(t.refNo||'-')}</td><td>₹${esc(t.amount)}</td><td>${esc(t.mode)}</td><td>${esc(t.receipt||'-')}</td><td>${isSold?'':`<span class="x" style="cursor:pointer;color:#8C2F2F" onclick="deleteTaxPayment('${p.id}','${t.id}')">✕</span>`}</td></tr>`
   ).join('') || '<tr><td colspan="7" class="sub">No payments recorded</td></tr>';
-  const rentRows=rents.map(r=>`<tr><td>${r.tenantName}</td><td>${r.status}</td><td>₹${r.monthlyRent}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">No tenant history</td></tr>';
-  const materials=(p.materials||[]).map(m=>`<span class="chip">${m.name}</span>`).join('') || '<span class="sub">None</span>';
+  const rentRows=rents.map(r=>`<tr><td>${esc(r.tenantName)}</td><td>${r.status}</td><td>₹${esc(r.monthlyRent)}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">No tenant history</td></tr>';
+  const materials=(p.materials||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('') || '<span class="sub">None</span>';
   document.getElementById('propViewBody').innerHTML = `
-    <div class="sub">${p.address}</div>
+    <div class="sub">${esc(p.address)}</div>
     ${p.ownOccupation ? `<div class="sub" style="margin-top:4px"><span class="badge amber">Own Occupation</span> — won't appear in Rent module</div>` : ''}
-    ${main ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> Portion of <b>${main.name}</b> — Types not listed below are automatically inherited from it</div>` : ''}
-    ${portions.length ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> This is the Main property. Portion(s): ${portions.map(x=>`<b>${x.name}</b>`).join(', ')}</div>` : ''}
-    <div style="margin-top:10px"><b>EB Number:</b> ${p.ebNumber||'-'}</div>
+    ${main ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> Portion of <b>${esc(main.name)}</b> — Types not listed below are automatically inherited from it</div>` : ''}
+    ${portions.length ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> This is the Main property. Portion(s): ${portions.map(x=>`<b>${esc(x.name)}</b>`).join(', ')}</div>` : ''}
+    <div style="margin-top:10px"><b>EB Number:</b> ${esc(p.ebNumber||'-')}</div>
     <div class="grid2" style="margin-top:6px">${taxNumLines}</div>
     <h3>Materials</h3>
     <div class="chiplist">${materials}</div>
@@ -677,9 +761,9 @@ function viewProperty(id){
     <h3>Actions</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn secondary small" onclick="closeModal('propViewBg');openPropertyForm('${p.id}')">Edit Property</button>
-      <button class="btn secondary small" onclick="openPropertyPdf('${p.id}')">View PDF</button>
-      <button class="btn secondary small" onclick="downloadPropertyPdf('${p.id}')">Download PDF</button>
-      ${p.status!=='Sold' ? `<button class="btn danger small" onclick="openSold('${p.id}')">Mark as Sold</button>` : `<span class="sub">Sold to ${p.soldInfo?.buyerName||''} on ${p.soldInfo?.date||''} for ₹${p.soldInfo?.amount||''}</span>`}
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, propertyPdfMenuItems('${p.id}','view'))">View PDF ▾</button>
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, propertyPdfMenuItems('${p.id}','download'))">Download ▾</button>
+      ${p.status!=='Sold' ? `<button class="btn danger small" onclick="openSold('${p.id}')">Mark as Sold</button>` : `<span class="sub">Sold to ${esc(p.soldInfo?.buyerName||'')} on ${esc(p.soldInfo?.date||'')} for ₹${esc(p.soldInfo?.amount||'')}</span>`}
       <button class="btn danger small" onclick="deleteProperty('${p.id}')">Delete Property</button>
     </div>
   `;
@@ -687,6 +771,11 @@ function viewProperty(id){
 }
 function deleteProperty(id){
   const p=loadProps().find(x=>x.id===id);
+  const portionsOfThis=loadProps().filter(x=>x.linkedTo===id);
+  if(portionsOfThis.length){
+    toast(`Cannot delete "${p.name}" — it is the Main property for: ${portionsOfThis.map(x=>x.name).join(', ')}. Delete or unlink those portions first.`, true);
+    return;
+  }
   const linkedRents=loadRents().filter(r=>r.propertyId===id);
   const hasHistory = linkedRents.some(r=>(r.ledger||[]).length>1);
   if(hasHistory){
@@ -706,17 +795,23 @@ function deleteProperty(id){
 }
 
 /* Tax payments */
-/* Tax type list — extensible, same "type to add new" pattern reused everywhere a Type is picked */
+/* Extensible "type to add new" lists — reused for Tax Type and Location pickers */
 const LS_TAXTYPES='asm_rm2_taxtypes';
+const LS_LOCATIONS='asm_rm2_locations';
 function loadTaxTypes(){ return JSON.parse(localStorage.getItem(LS_TAXTYPES)||'["Property Tax","Water","Drainage","Other"]'); }
 function saveTaxTypes(a){ localStorage.setItem(LS_TAXTYPES, JSON.stringify(a)); }
-function filterTypeOptsGeneric(searchId, hiddenId, boxId){
+function loadLocations(){ return JSON.parse(localStorage.getItem(LS_LOCATIONS)||'[]'); }
+function saveLocations(a){ localStorage.setItem(LS_LOCATIONS, JSON.stringify(a)); }
+function getExtList(listName){ return listName==='location' ? loadLocations() : loadTaxTypes(); }
+function setExtList(listName,a){ if(listName==='location') saveLocations(a); else saveTaxTypes(a); }
+function filterTypeOptsGeneric(searchId, hiddenId, boxId, listName){
+  listName = listName||'tax';
   const q=document.getElementById(searchId).value.trim();
-  const types=loadTaxTypes().filter(t=>t.toLowerCase().includes(q.toLowerCase()));
+  const types=getExtList(listName).filter(t=>t.toLowerCase().includes(q.toLowerCase()));
   const box=document.getElementById(boxId);
-  let html=types.map(t=>`<div class="opt" onclick="selectTypeGeneric('${searchId}','${hiddenId}','${boxId}','${t.replace(/'/g,"\\'")}')">${t}</div>`).join('');
-  if(q && !loadTaxTypes().some(t=>t.toLowerCase()===q.toLowerCase())){
-    html+=`<div class="opt" style="color:var(--brand-dk);font-weight:600" onclick="addNewTypeGeneric('${searchId}','${hiddenId}','${boxId}','${q.replace(/'/g,"\\'")}')">+ Add "${q}" as new type</div>`;
+  let html=types.map(t=>`<div class="opt" onclick="selectTypeGeneric('${searchId}','${hiddenId}','${boxId}',${jsq(t)},'${listName}')">${esc(t)}</div>`).join('');
+  if(q && !getExtList(listName).some(t=>t.toLowerCase()===q.toLowerCase())){
+    html+=`<div class="opt" style="color:var(--brand-dk);font-weight:600" onclick="addNewTypeGeneric('${searchId}','${hiddenId}','${boxId}',${jsq(q)},'${listName}')">+ Add "${esc(q)}" as new ${listName==='location'?'location':'type'}</div>`;
   }
   box.innerHTML = html || '<div class="opt sub">No match</div>';
   box.classList.add('show');
@@ -726,12 +821,13 @@ function selectTypeGeneric(searchId,hiddenId,boxId,t){
   document.getElementById(searchId).value=t;
   document.getElementById(boxId).classList.remove('show');
 }
-function addNewTypeGeneric(searchId,hiddenId,boxId,t){
-  let types=loadTaxTypes();
-  if(!types.some(x=>x.toLowerCase()===t.toLowerCase())){ types.push(t); saveTaxTypes(types); }
+function addNewTypeGeneric(searchId,hiddenId,boxId,t,listName){
+  listName = listName||'tax';
+  let types=getExtList(listName);
+  if(!types.some(x=>x.toLowerCase()===t.toLowerCase())){ types.push(t); setExtList(listName,types); }
   selectTypeGeneric(searchId,hiddenId,boxId,t);
 }
-document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { ['taxPayTypeOpts','propTaxNumTypeOpts'].forEach(id=>{ const o=document.getElementById(id); if(o) o.classList.remove('show'); }); } });
+document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { ['taxPayTypeOpts','propTaxNumTypeOpts','propLocationOpts','reportScopeLocationOpts','reportScopePropOpts'].forEach(id=>{ const o=document.getElementById(id); if(o) o.classList.remove('show'); }); } });
 function openTaxPay(propId){
   document.getElementById('taxPayPropId').value=propId;
   ['taxPayRefNo','taxPayAmt','taxPayReceipt'].forEach(f=>document.getElementById(f).value='');
@@ -760,7 +856,7 @@ function saveTaxPayment(){
     const existingNum=p.taxNumbers.find(t=>t.type===type);
     if(existingNum){ existingNum.number=refNo; } else { p.taxNumbers.push({id:uid(), type, number:refNo}); }
   }
-  saveProps(props);
+  if(!saveProps(props)) return;
   closeModal('taxPayBg');
   viewProperty(propId);
   toast('Payment recorded');
@@ -846,7 +942,7 @@ function filterPropOpts(){
   const occupiedIds=new Set(loadRents().filter(r=>r.status==='Active' && r.id!==editingId).map(r=>r.propertyId));
   const props=loadProps().filter(p=>p.status!=='Sold' && !p.ownOccupation).filter(p=>!occupiedIds.has(p.id)).filter(p=>p.name.toLowerCase().includes(q));
   const box=document.getElementById('rentPropOpts');
-  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectRentProp('${p.id}')">${p.name}<div class="sm">${p.address}</div></div>`).join('') || '<div class="opt sub">No matching vacant properties</div>';
+  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectRentProp('${p.id}')">${esc(p.name)}<div class="sm">${esc(p.address)}</div></div>`).join('') || '<div class="opt sub">No matching vacant properties</div>';
   box.classList.add('show');
 }
 document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) document.getElementById('rentPropOpts').classList.remove('show'); });
@@ -862,12 +958,12 @@ function selectRentProp(id){
 }
 function showRentPropInfo(p){
   if(!p){document.getElementById('rentPropInfo').innerHTML='';return;}
-  document.getElementById('rentPropInfo').innerHTML=`EB Number: <b>${p.ebNumber||'-'}</b> &nbsp;|&nbsp; Address: ${p.address}`;
+  document.getElementById('rentPropInfo').innerHTML=`EB Number: <b>${esc(p.ebNumber||'-')}</b> &nbsp;|&nbsp; Address: ${esc(p.address)}`;
 }
 function populateRentMatSelect(){
   const sel=document.getElementById('rentMatSelect');
   const mats=selectedRentProp?selectedRentProp.materials||[]:[];
-  sel.innerHTML='<option value="">Select material from property...</option>'+mats.map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+  sel.innerHTML='<option value="">Select material from property...</option>'+mats.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
 }
 function addRentMaterial(){
   const sel=document.getElementById('rentMatSelect');
@@ -881,7 +977,7 @@ function addRentMaterial(){
 function removeRentMaterial(id){editRentMaterials=editRentMaterials.filter(m=>m.materialId!==id);renderRentMaterialsChips();}
 function renderRentMaterialsChips(){
   document.getElementById('rentMaterialsChips').innerHTML = editRentMaterials.map(m=>
-    `<span class="chip">${m.name} × ${m.qty} <span class="x" onclick="removeRentMaterial('${m.materialId}')">×</span></span>`
+    `<span class="chip">${esc(m.name)} × ${esc(m.qty)} <span class="x" onclick="removeRentMaterial('${m.materialId}')">×</span></span>`
   ).join('') || '<span class="sub">None given yet</span>';
 }
 function addRentFile(ev){
@@ -924,7 +1020,7 @@ function compressImage(file, callback){
 function removeRentFile(i){editRentFiles.splice(i,1);renderRentFileThumbs();}
 function renderRentFileThumbs(){
   document.getElementById('rentFileThumbs').innerHTML = editRentFiles.map((f,i)=>
-    `<div class="f">📎 ${f.name.slice(0,18)} <span class="x" style="cursor:pointer;color:#8C2F2F" onclick="removeRentFile(${i})">×</span></div>`
+    `<div class="f">📎 ${esc(f.name.slice(0,18))} <span class="x" style="cursor:pointer;color:#8C2F2F" onclick="removeRentFile(${i})">×</span></div>`
   ).join('');
 }
 function saveRent(){
@@ -1028,11 +1124,11 @@ function renderRentList(){
     const st=getTenantStatus(r);
     return `<div class="card clickable" onclick="viewRent('${r.id}')">
       <div class="row1">
-        <div class="name">${r.tenantName}</div>
+        <div class="name">${esc(r.tenantName)}</div>
         <span class="badge ${r.status==='Active'?'active':'closed'}">${r.status}</span>
       </div>
-      <div class="sub">${p?p.name:'(property removed)'} &nbsp;|&nbsp; ${r.mobile1}</div>
-      <div class="sub">Monthly Rent: ₹${r.monthlyRent} &nbsp;|&nbsp; <span class="badge ${st.badgeClass}">${st.label}</span></div>
+      <div class="sub">${esc(p?p.name:'(property removed)')} &nbsp;|&nbsp; ${esc(r.mobile1)}</div>
+      <div class="sub">Monthly Rent: ₹${esc(r.monthlyRent)} &nbsp;|&nbsp; <span class="badge ${st.badgeClass}">${st.label}</span></div>
     </div>`;
   }).join('');
 }
@@ -1050,20 +1146,20 @@ function renderRentViewBody(){
   const p=loadProps().find(x=>x.id===r.propertyId);
   const st=getTenantStatus(r);
   document.getElementById('rentViewTitle').textContent=r.tenantName;
-  const matChips=(r.materialsGiven||[]).map(m=>`<span class="chip">${m.name} × ${m.qty}</span>`).join('') || '<span class="sub">None</span>';
-  const fileChips=(r.files||[]).map((f,i)=>`<span class="chip">📎 ${f.name.slice(0,16)}</span>`).join('') || '<span class="sub">None</span>';
+  const matChips=(r.materialsGiven||[]).map(m=>`<span class="chip">${esc(m.name)} × ${esc(m.qty)}</span>`).join('') || '<span class="sub">None</span>';
+  const fileChips=(r.files||[]).map((f,i)=>`<span class="chip" style="cursor:pointer" onclick="openTenantFile('${r.id}',${i})">📎 ${esc(f.name.slice(0,16))} ⤢</span>`).join('') || '<span class="sub">None</span>';
   const ledgerRows=(r.ledger||[]).map((row,idx)=>{
     const bal=(parseFloat(row.amount)||0)-(parseFloat(row.paidAmount)||0);
     const hasNote = row.note && row.note.trim();
     const dateSet = (row.paidDate||'').trim().length>0;
     return `
     <tr>
-      <td><input type="text" value="${row.dueDate}" onchange="updateLedgerField(${idx},'dueDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
+      <td><input type="text" value="${esc(row.dueDate)}" onchange="updateLedgerField(${idx},'dueDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
       <td><input type="number" value="${row.amount}" onchange="updateLedgerField(${idx},'amount',this.value)" style="width:80px"></td>
-      <td><input type="text" value="${row.paidDate||''}" onchange="updateLedgerField(${idx},'paidDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
+      <td><input type="text" value="${esc(row.paidDate||'')}" onchange="updateLedgerField(${idx},'paidDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
       <td><input type="number" value="${row.paidAmount||0}" onchange="updateLedgerField(${idx},'paidAmount',this.value)" style="width:80px${dateSet?'':';background:#EDEBE4;color:#999'}" ${dateSet?'':'disabled title="Set Paid Date first"'}></td>
       <td><select onchange="updateLedgerField(${idx},'paymentType',this.value)">
-        ${['Cash','UPI','Bank'].map(t=>`<option ${row.paymentType===t?'selected':''}>${t}</option>`).join('')}
+        ${['Cash','UPI','Bank'].map(t=>`<option ${row.paymentType===t?'selected':''}>${esc(t)}</option>`).join('')}
       </select></td>
       <td style="font-weight:700;color:${bal>0?'#8C2F2F':'#14532d'}">₹${bal.toFixed(2)}</td>
       <td><span onclick="openNoteEditor(${idx})" style="cursor:pointer;color:${hasNote?'#14532d':'#B7B7AC'};font-size:15px" title="Note">📝</span></td>
@@ -1071,19 +1167,19 @@ function renderRentViewBody(){
     </tr>`;}).join('') || '<tr><td colspan="8" class="sub">No ledger rows yet — tap "Add Month" below</td></tr>';
 
   document.getElementById('rentViewBody').innerHTML = `
-    <div class="sub">${p?p.name:'(property removed)'} — ${p?p.address:''}</div>
+    <div class="sub">${esc(p?p.name:'(property removed)')} — ${esc(p?p.address:'')}</div>
     <div style="margin-top:8px"><span class="badge ${st.badgeClass}" style="font-size:13px;padding:5px 12px">Account Balance: ${st.label}</span></div>
     <div class="grid2" style="margin-top:10px">
-      <div><b>Mobile:</b> ${r.mobile1} ${r.mobile2?('/ '+r.mobile2):''}</div>
-      <div><b>EB Number:</b> ${p?p.ebNumber||'-':'-'}</div>
-      <div><b>Advance:</b> ₹${r.advanceAmount||0} on ${r.advanceDate||'-'} (${r.advanceType||'-'})${r.advanceNote?' — '+r.advanceNote:''}</div>
-      <div><b>Monthly Rent:</b> ₹${r.monthlyRent}</div>
-      <div><b>ID Proof:</b> ${r.idProofType} ${r.idProofNo||''}</div>
+      <div><b>Mobile:</b> ${esc(r.mobile1)} ${r.mobile2?('/ '+esc(r.mobile2)):''}</div>
+      <div><b>EB Number:</b> ${esc(p?p.ebNumber||'-':'-')}</div>
+      <div><b>Advance:</b> ₹${esc(r.advanceAmount||0)} on ${esc(r.advanceDate||'-')} (${esc(r.advanceType||'-')})${r.advanceNote?' — '+esc(r.advanceNote):''}</div>
+      <div><b>Monthly Rent:</b> ₹${esc(r.monthlyRent)}</div>
+      <div><b>ID Proof:</b> ${esc(r.idProofType)} ${esc(r.idProofNo||'')}</div>
       <div><b>Status:</b> ${r.status}</div>
     </div>
     <h3>Materials Given</h3><div class="chiplist">${matChips}</div>
     <h3>Uploaded Files</h3><div class="chiplist">${fileChips}</div>
-    ${r.remarks?`<h3>Remarks</h3><div class="sub">${r.remarks}</div>`:''}
+    ${r.remarks?`<h3>Remarks</h3><div class="sub">${esc(r.remarks)}</div>`:''}
 
     <h3>Monthly Rent History</h3>
     <div style="overflow-x:auto">
@@ -1097,9 +1193,9 @@ function renderRentViewBody(){
     <h3>Actions</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn secondary small" onclick="closeModal('rentViewBg');openRentForm('${r.id}')">Edit Tenant</button>
-      <button class="btn secondary small" onclick="openRentPdf('${r.id}')">View PDF</button>
-      <button class="btn secondary small" onclick="downloadRentPdf('${r.id}')">Download PDF</button>
-      ${r.status==='Active'?`<button class="btn danger small" onclick="openVacate('${r.id}')">Vacate</button>`:`<span class="sub">Vacated on ${r.vacateInfo?.date||''}</span>`}
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, rentPdfMenuItems('${r.id}','view'))">View PDF ▾</button>
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, rentPdfMenuItems('${r.id}','download'))">Download ▾</button>
+      ${r.status==='Active'?`<button class="btn danger small" onclick="openVacate('${r.id}')">Vacate</button>`:`<span class="sub">Vacated on ${esc(r.vacateInfo?.date||'')}</span>`}
       <button class="btn danger small" onclick="deleteRent('${r.id}')">Delete Tenant</button>
     </div>
   `;
@@ -1194,8 +1290,11 @@ function confirmVacate(){
   let rents=loadRents();
   const r=rents.find(x=>x.id===rentId);
   r.status='Vacated';
+  const vacProp=loadProps().find(x=>x.id===r.propertyId);
   r.vacateInfo={
     date:document.getElementById('vacateDate').value,
+    propertyNameAtVacate: vacProp?vacProp.name:null,
+    locationAtVacate: vacProp?(vacProp.location||''):'',
     advanceReturn:document.getElementById('vacateAdvReturn').value,
     rentBalance:document.getElementById('vacateRentBal').value,
     materialsReturn:document.getElementById('vacateMatReturn').value,
@@ -1347,6 +1446,42 @@ function downloadPropertyPdf(propId){
   const {doc, filename}=buildPropertyPdf(propId);
   doc.save(filename);
 }
+function buildSoldDetailsPdf(propId){
+  const p=loadProps().find(x=>x.id===propId);
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Sold Details';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Property Name: ${p.name}`, 14, y); y+=6;
+  doc.text(`Address: ${p.address}`, 14, y, {maxWidth:180}); y+=10;
+  const si=p.soldInfo||{};
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Sold Details', 14, y); y+=7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Buyer Name: ${si.buyerName||'-'}`, 14, y); y+=6;
+  doc.text(`Sale Amount: Rs.${si.amount||0}`, 14, y); y+=6;
+  doc.text(`Sale Date: ${si.date||'-'}`, 14, y); y+=6;
+  pdfFooter(doc);
+  return {doc, filename:`${p.name.replace(/\s+/g,'_')}_Sold_Details_${todayDMYFile()}.pdf`};
+}
+function openSoldDetailsPdf(propId){
+  const {doc}=buildSoldDetailsPdf(propId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download instead.', true);
+}
+function downloadSoldDetailsPdf(propId){
+  const {doc, filename}=buildSoldDetailsPdf(propId);
+  doc.save(filename);
+}
+function propertyPdfMenuItems(propId, mode){
+  const p=loadProps().find(x=>x.id===propId);
+  const items=[{label:'Property Details', action:`${mode==='view'?'openPropertyPdf':'downloadPropertyPdf'}('${propId}')`}];
+  if(p && p.status==='Sold'){
+    items.push({label:'Sold Details', action:`${mode==='view'?'openSoldDetailsPdf':'downloadSoldDetailsPdf'}('${propId}')`});
+  }
+  return items;
+}
 function buildRentPdf(rentId){
   const r=loadRents().find(x=>x.id===rentId);
   const p=loadProps().find(x=>x.id===r.propertyId);
@@ -1392,12 +1527,57 @@ function downloadRentPdf(rentId){
   const {doc, filename}=buildRentPdf(rentId);
   doc.save(filename);
 }
-/* ===================== CONSOLIDATED (all-Active) PDFs — triggered from the tab's own View/PDF button ===================== */
-function buildConsolidatedRentPdf(){
-  const props=loadProps();
-  const rents=loadRents().filter(r=>r.status==='Active');
+function buildVacateDetailsPdf(rentId){
+  const r=loadRents().find(x=>x.id===rentId);
+  const p=loadProps().find(x=>x.id===r.propertyId);
+  const propName=(r.vacateInfo&&r.vacateInfo.propertyNameAtVacate) || (p?p.name:'(property removed)');
   const doc=new jspdf.jsPDF();
-  const pageTitle='Tenant Reports';
+  const pageTitle='Vacate Details';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Tenant Name: ${r.tenantName}`, 14, y); y+=6;
+  doc.text(`Property: ${propName}`, 14, y, {maxWidth:180}); y+=6;
+  doc.text(`Mobile: ${r.mobile1}${r.mobile2?(' / '+r.mobile2):''}`, 14, y); y+=10;
+  const vi=r.vacateInfo||{};
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Vacate Settlement', 14, y); y+=7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Vacate Date: ${vi.date||'-'}`, 14, y); y+=6;
+  doc.text(`Advance Returned: Rs.${vi.advanceReturn||0}`, 14, y); y+=6;
+  doc.text(`Rent Balance Deducted: Rs.${vi.rentBalance||0}`, 14, y); y+=6;
+  doc.text(`Materials Return Value: Rs.${vi.materialsReturn||0}`, 14, y); y+=6;
+  doc.text(`Other Claim / Damage: Rs.${vi.claim||0}`, 14, y); y+=6;
+  doc.text(`Handover Payment Type: ${vi.handoverType||'-'}`, 14, y); y+=8;
+  doc.setFont(undefined,'bold'); doc.setFontSize(11.5);
+  doc.text(`Net Amount Handed Over: Rs.${vi.net||0}`, 14, y); y+=10;
+  pdfFooter(doc);
+  return {doc, filename:`${r.tenantName.replace(/\s+/g,'_')}_Vacate_Details_${todayDMYFile()}.pdf`};
+}
+function openVacateDetailsPdf(rentId){
+  const {doc}=buildVacateDetailsPdf(rentId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download instead.', true);
+}
+function downloadVacateDetailsPdf(rentId){
+  const {doc, filename}=buildVacateDetailsPdf(rentId);
+  doc.save(filename);
+}
+function rentPdfMenuItems(rentId, mode){
+  const r=loadRents().find(x=>x.id===rentId);
+  const items=[{label:'Tenant Info', action:`${mode==='view'?'openRentPdf':'downloadRentPdf'}('${rentId}')`}];
+  if(r && r.status==='Vacated'){
+    items.push({label:'Vacate Details', action:`${mode==='view'?'openVacateDetailsPdf':'downloadVacateDetailsPdf'}('${rentId}')`});
+  }
+  return items;
+}
+/* ===================== CONSOLIDATED (all-Active) PDFs — triggered from the tab's own View/PDF button ===================== */
+function buildConsolidatedRentPdf(scopeIds, scopeLabel){
+  const props=loadProps();
+  let rents=loadRents().filter(r=>r.status==='Active');
+  if(scopeIds) rents=rents.filter(r=>scopeIds.includes(r.propertyId));
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Tenant Reports'+(scopeLabel?` — ${scopeLabel}`:'');
   pdfHeader(doc, pageTitle);
   let y=30;
   const rows=rents.map(r=>{
@@ -1409,16 +1589,15 @@ function buildConsolidatedRentPdf(){
   pdfFooter(doc);
   return {doc, filename:`Tenant_Reports_${todayDMYFile()}.pdf`};
 }
-function openConsolidatedRentPdf(){
-  const {doc}=buildConsolidatedRentPdf();
-  const url=doc.output('bloburl');
-  const w=window.open(url,'_blank');
-  if(!w) toast('Could not open PDF viewer — try again.', true);
-}
-function buildConsolidatedPropertyPdf(){
-  const props=loadProps().filter(p=>p.status!=='Sold').sort((a,b)=>a.name.localeCompare(b.name));
+function buildConsolidatedPropertyPdf(scopeIds, scopeLabel){
+  // scopeIds is null for All, otherwise it contains the exact property IDs
+  // selected by By Location or By Property.
+  let props=loadProps()
+    .filter(p=>p.status!=='Sold')
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  if(Array.isArray(scopeIds)) props=props.filter(p=>scopeIds.includes(p.id));
   const doc=new jspdf.jsPDF();
-  const pageTitle='Property Reports';
+  const pageTitle='Property Reports'+(scopeLabel?` — ${scopeLabel}`:'');
   pdfHeader(doc, pageTitle);
   let y=30;
   const rows=[];
@@ -1440,12 +1619,140 @@ function buildConsolidatedPropertyPdf(){
     }
     if(pIdx < props.length-1) rows.push(['','','','','']); // blank line between properties
   });
-  y = pdfTable(doc, 14, y, [46,34,26,30,30], ['Property','Type','Number','Last Paid Date','Amount'], rows.length?rows:[['No active properties','-','-','-','-']], pageTitle);
+  y = pdfTable(doc, 14, y, [46,34,26,30,30], ['Property','Type','Number','Last Paid Date','Amount'], rows.length?rows:[['No properties in this scope','-','-','-','-']], pageTitle);
   pdfFooter(doc);
   return {doc, filename:`Property_Reports_${todayDMYFile()}.pdf`};
 }
-function openConsolidatedPropertyPdf(){
-  const {doc}=buildConsolidatedPropertyPdf();
+
+/* ===================== REPORT SCOPE PICKER (shared by both toolbar View/PDF buttons) ===================== */
+let reportScopeTarget='rent';
+function openReportScope(target){
+  reportScopeTarget=target;
+  document.getElementById('reportScopeTitle').textContent = target==='rent' ? 'Tenant Report Scope' : 'Property Report Scope';
+  document.getElementById('reportScopeVacateHistoryBtn').style.display = target==='property' ? '' : 'none';
+  document.getElementById('reportScopeMode').value='all';
+  document.getElementById('reportScopeLocationSearch').value='';
+  document.getElementById('reportScopeLocationVal').value='';
+  document.getElementById('reportScopePropSearch').value='';
+  document.getElementById('reportScopePropVal').value='';
+  toggleReportScopeMode();
+  openModalEl('reportScopeBg');
+}
+function toggleReportScopeMode(){
+  const m=document.getElementById('reportScopeMode').value;
+  document.getElementById('reportScopeLocationWrap').style.display = m==='location'?'block':'none';
+  document.getElementById('reportScopePropertyWrap').style.display = m==='property'?'block':'none';
+}
+function filterReportScopeProps(){
+  const q=document.getElementById('reportScopePropSearch').value.toLowerCase();
+  const props=loadProps().filter(p=>p.name.toLowerCase().includes(q));
+  const box=document.getElementById('reportScopePropOpts');
+  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectReportScopeProp('${p.id}')">${esc(p.name)}</div>`).join('') || '<div class="opt sub">No match</div>';
+  box.classList.add('show');
+}
+function selectReportScopeProp(id){
+  const pr=loadProps().find(x=>x.id===id);
+  document.getElementById('reportScopePropVal').value=id;
+  document.getElementById('reportScopePropSearch').value=pr?pr.name:'';
+  document.getElementById('reportScopePropOpts').classList.remove('show');
+}
+function buildVacatedHistoryPdf(scopeIds=null, scopeLabel=null){
+  const props=loadProps();
+  let rents=loadRents().filter(r=>r.status==='Vacated');
+  if(Array.isArray(scopeIds)) rents=rents.filter(r=>scopeIds.includes(r.propertyId));
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Vacated Tenant History'+(scopeLabel?` — ${scopeLabel}`:'');
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  const rows=rents.map(r=>{
+    const p=props.find(x=>x.id===r.propertyId);
+    const propName=(r.vacateInfo&&r.vacateInfo.propertyNameAtVacate) || (p?p.name:'(property removed)');
+    const fromDate=(r.ledger&&r.ledger.length)?r.ledger[0].dueDate:'-';
+    const toDate=r.vacateInfo?.date||'-';
+    const idProof=`${r.idProofType||''} ${r.idProofNo||''}`.trim()||'-';
+    const advReturned=r.vacateInfo?.advanceReturn!=null ? 'Rs.'+r.vacateInfo.advanceReturn : '-';
+    const net=r.vacateInfo?.net!=null ? 'Rs.'+r.vacateInfo.net : '-';
+    return [r.tenantName, propName, `${fromDate} to ${toDate}`, r.mobile1, idProof, advReturned, net];
+  });
+  y = pdfTable(doc, 14, y, [26,30,38,24,26,20,22], ['Tenant','Property','Duration','Mobile','ID Proof','Adv. Returned','Net Settlement'], rows.length?rows:[['No vacated tenants in this scope','-','-','-','-','-','-']], pageTitle);
+  pdfFooter(doc);
+  return {doc, filename:`Vacated_Tenant_History${scopeLabel?'_'+scopeLabel.replace(/[^a-z0-9]+/gi,'_'):''}_${todayDMYFile()}.pdf`};
+}
+function generateScopedVacateHistory(){
+  if(reportScopeTarget!=='property') return;
+  const mode=document.getElementById('reportScopeMode').value;
+  let scopeIds=null, scopeLabel=null;
+  const props=loadProps();
+  if(mode==='all'){
+    scopeIds=null;
+  } else if(mode==='location'){
+    const loc=document.getElementById('reportScopeLocationVal').value.trim()
+             || document.getElementById('reportScopeLocationSearch').value.trim();
+    if(!loc){toast('Select a location');return;}
+    scopeIds=props
+      .filter(p=>(p.location||'').trim().toLowerCase()===loc.toLowerCase())
+      .map(p=>p.id);
+    scopeLabel=loc;
+  } else if(mode==='property'){
+    let pid=document.getElementById('reportScopePropVal').value.trim();
+    if(!pid){
+      const typed=document.getElementById('reportScopePropSearch').value.trim();
+      if(typed){
+        const match=props.find(x=>x.name.trim().toLowerCase()===typed.toLowerCase());
+        if(match) pid=match.id;
+      }
+    }
+    if(!pid){toast('Select a property');return;}
+    const prop=props.find(x=>x.id===pid);
+    if(!prop){toast('Property not found');return;}
+    scopeIds=[prop.id];
+    scopeLabel=prop.name;
+  } else {
+    toast('Select All, Location or Property for Vacate History');
+    return;
+  }
+  closeModal('reportScopeBg');
+  const {doc}=buildVacatedHistoryPdf(scopeIds, scopeLabel);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try again.', true);
+}
+function generateScopedReport(){
+  const mode=document.getElementById('reportScopeMode').value;
+  let scopeIds=null, scopeLabel=null;
+  if(mode==='location'){
+    // Use the selected hidden value first. This prevents a partially typed
+    // location from being treated as a valid selection.
+    const loc=document.getElementById('reportScopeLocationVal').value.trim()
+             || document.getElementById('reportScopeLocationSearch').value.trim();
+    if(!loc){toast('Select a location');return;}
+    const allProps=loadProps();
+    scopeIds=allProps
+      .filter(p=>(p.location||'').trim().toLowerCase()===loc.toLowerCase())
+      .map(p=>p.id);
+    scopeLabel=loc;
+  } else if(mode==='property'){
+    let pid=document.getElementById('reportScopePropVal').value.trim();
+    const props=loadProps();
+    // If the user typed an exact property name, resolve it automatically.
+    // Do not broaden the result to linked/main/portion properties.
+    if(!pid){
+      const typed=document.getElementById('reportScopePropSearch').value.trim();
+      if(typed){
+        const match=props.find(x=>x.name.trim().toLowerCase()===typed.toLowerCase());
+        if(match) pid=match.id;
+      }
+    }
+    if(!pid){toast('Select a property');return;}
+    const p=props.find(x=>x.id===pid);
+    if(!p){toast('Property not found');return;}
+    scopeIds=[p.id];
+    scopeLabel=p.name;
+  }
+  closeModal('reportScopeBg');
+  const {doc} = reportScopeTarget==='rent'
+    ? buildConsolidatedRentPdf(scopeIds, scopeLabel)
+    : buildConsolidatedPropertyPdf(scopeIds, scopeLabel);
   const url=doc.output('bloburl');
   const w=window.open(url,'_blank');
   if(!w) toast('Could not open PDF viewer — try again.', true);
@@ -1453,7 +1760,7 @@ function openConsolidatedPropertyPdf(){
 
 /* ===================== BACKUP / RESTORE ===================== */
 function doBackup(){
-  const data={properties:loadProps(), rents:loadRents(), exportedAt:new Date().toISOString()};
+  const data={properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes(), exportedAt:new Date().toISOString()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -1464,22 +1771,32 @@ function doBackup(){
 function doRestore(){
   const f=document.getElementById('restoreFile').files[0];
   if(!f){toast('Choose a backup file first');return;}
-  const reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      const data=JSON.parse(e.target.result);
-      saveProps(data.properties||[]);
-      saveRents(data.rents||[]);
-      renderPropList(); renderRentList();
-      toast('Data restored successfully');
-    }catch(err){ toast('Invalid backup file'); }
-  };
-  reader.readAsText(f);
+  askConfirm('Restoring will REPLACE all current Property and Rent data with the backup file. Continue?', ()=>{
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const data=JSON.parse(e.target.result);
+        if(!Array.isArray(data.properties) || !Array.isArray(data.rents)){ toast('Invalid backup file', true); return; }
+        if(!saveProps(data.properties)) return;
+        if(!saveRents(data.rents)) return;
+        // pickers: restore saved lists, and always include any location already used by a property
+        const locs=Array.isArray(data.locations)?data.locations.slice():[];
+        data.properties.forEach(p=>{ if(p.location && !locs.some(l=>l.toLowerCase()===p.location.toLowerCase())) locs.push(p.location); });
+        saveLocations(locs);
+        if(Array.isArray(data.taxTypes) && data.taxTypes.length) saveTaxTypes(data.taxTypes);
+        renderPropList(); renderRentList();
+        toast('Data restored successfully');
+      }catch(err){ toast('Invalid backup file', true); }
+    };
+    reader.readAsText(f);
+  }, 'Restore', 'Confirm Restore');
 }
 function doReset(){
-  saveProps([]); saveRents([]);
-  renderPropList(); renderRentList();
-  toast('All data has been reset');
+  askConfirm('This erases EVERY Property and Rent record on this device. Take a backup first. Continue?', ()=>{
+    saveProps([]); saveRents([]);
+    renderPropList(); renderRentList();
+    toast('All data has been reset');
+  }, 'Reset All', 'Confirm Reset');
 }
 
 /* ===================== INIT ===================== */
