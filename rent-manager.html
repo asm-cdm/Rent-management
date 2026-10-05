@@ -1,0 +1,2005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ASM Rent Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+// Request persistent storage so the browser does not
+// auto-clear this app's saved data when device storage runs low
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persist().then(function(granted) {
+    if (granted) {
+      console.log("Storage is now persistent - protected from auto-clear.");
+    } else {
+      console.log("Persistent storage not granted by browser.");
+    }
+  });
+}
+</script>
+
+<style>
+:root{
+  --bg:#F6F5F1; --panel:#FFFFFF; --ink:#1C1F1B; --sub:#5C645C;
+  --line:#DDD9CE; --brand:#14532D; --brand-dk:#0D3A1F; --brand-lt:#E7EFE8;
+  --amber:#A8681E; --amber-lt:#F5EAD9;
+  --red:#8C2F2F; --red-lt:#F6E7E7;
+  --radius:10px;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px}
+header{background:var(--brand-dk);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.2px}
+header .tag{font-size:12px;color:#BFD8C6}
+nav.tabs{display:flex;gap:6px;background:var(--panel);border-bottom:1px solid var(--line);padding:0 16px;overflow-x:auto}
+nav.tabs button{background:none;border:none;padding:13px 16px;font-size:14.5px;font-weight:600;color:var(--sub);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+nav.tabs button.active{color:var(--brand-dk);border-bottom-color:var(--brand)}
+main{padding:16px;max-width:1100px;margin:0 auto}
+.section{display:none}
+.section.active{display:block}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar input[type=text]{flex:1;min-width:180px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius);font-size:14.5px}
+.btn{padding:9px 16px;border-radius:var(--radius);border:1px solid var(--brand);background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+.btn:hover{background:var(--brand-dk)}
+.btn.secondary{background:#fff;color:var(--brand-dk);border-color:var(--line)}
+.btn.secondary:hover{background:var(--brand-lt)}
+.btn.danger{background:#fff;color:var(--red);border-color:var(--red-lt)}
+.btn.danger:hover{background:var(--red-lt)}
+.btn.small{padding:5px 10px;font-size:12.5px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+.card.clickable{cursor:pointer}
+.card.clickable:hover{border-color:var(--brand)}
+.card .row1{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.card .name{font-weight:700;font-size:15.5px}
+.card .sub{color:var(--sub);font-size:13px;margin-top:2px}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11.5px;font-weight:700}
+.badge.active{background:var(--brand-lt);color:var(--brand-dk)}
+.badge.closed{background:#EDEBE4;color:var(--sub)}
+.badge.due{background:var(--red-lt);color:var(--red)}
+.badge.clear{background:var(--brand-lt);color:var(--brand-dk)}
+.badge.overdue{background:var(--red-lt);color:var(--red)}
+.badge.amber{background:var(--amber-lt);color:var(--amber)}
+.badge.advance{background:var(--brand-lt);color:var(--brand-dk)}
+.empty{color:var(--sub);text-align:center;padding:40px 10px;font-size:14px}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(20,20,16,.45);z-index:50;align-items:flex-start;justify-content:center;padding:24px 12px;overflow-y:auto}
+#confirmBg{z-index:90}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:12px;width:100%;max-width:640px;padding:20px 22px;margin-bottom:40px}
+.modal h2{margin:0 0 14px;font-size:17px;color:var(--brand-dk)}
+.modal h3{font-size:14px;color:var(--brand-dk);margin:18px 0 8px;border-top:1px solid var(--line);padding-top:14px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12.5px;color:var(--sub);margin-bottom:4px;font-weight:600}
+.field label .req{color:var(--red)}
+.field input[type=text],.field input[type=number],.field textarea,.field select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14.5px;font-family:inherit}
+.field textarea{resize:vertical;min-height:50px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 12px}
+@media(max-width:520px){.grid2,.grid3{grid-template-columns:1fr}}
+.daterow{display:flex;gap:6px;position:relative}
+.daterow input[type=text]{flex:1}
+.dp-popup{position:absolute;z-index:70;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.22);padding:7px;width:205px;display:none}
+.menu-popup{position:absolute;z-index:70;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.22);display:none;overflow:hidden;min-width:170px}
+.menu-popup.show{display:block}
+.menu-popup .mi{padding:11px 15px;font-size:13.5px;cursor:pointer;color:var(--ink)}
+.menu-popup .mi:hover{background:var(--brand-lt)}
+.menu-popup .mi+.mi{border-top:1px solid var(--line)}
+.dp-popup.show{display:block}
+.dp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.dp-head button{background:none;border:none;font-size:14px;cursor:pointer;color:var(--brand-dk);padding:1px 7px;border-radius:5px}
+.dp-head button:hover{background:var(--brand-lt)}
+.dp-head .lbl{font-weight:700;font-size:11.5px}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center}
+.dp-grid .dow{font-size:9px;color:var(--sub);padding:2px 0;font-weight:600}
+.dp-grid .day{padding:4px 0;border-radius:5px;cursor:pointer;font-size:11px}
+.dp-grid .day:hover{background:var(--brand-lt)}
+.dp-grid .day.today{border:1px solid var(--brand)}
+.dp-grid .day.sel{background:var(--brand);color:#fff}
+.dp-grid .blank{visibility:hidden}
+.dp-foot{display:flex;justify-content:space-between;margin-top:5px;border-top:1px solid var(--line);padding-top:5px}
+.dp-foot button{font-size:10.5px;background:none;border:none;color:var(--brand-dk);cursor:pointer;font-weight:600}
+.daterow .cal{width:38px;height:38px;border:1px solid var(--line);border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
+.searchsel{position:relative}
+.searchsel input{width:100%}
+.searchsel .opts{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:8px;max-height:200px;overflow-y:auto;z-index:10;box-shadow:0 6px 18px rgba(0,0,0,.12);display:none}
+.searchsel .opts.show{display:block}
+.searchsel .opt{padding:9px 12px;cursor:pointer;font-size:14px}
+.searchsel .opt:hover,.searchsel .opt.hl{background:var(--brand-lt)}
+.searchsel .opt .sm{color:var(--sub);font-size:12px}
+table.led{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+table.led th{text-align:left;color:var(--sub);font-size:11.5px;padding:6px 6px;border-bottom:2px solid var(--line)}
+table.led td{padding:6px 6px;border-bottom:1px solid var(--line)}
+table.led input,table.led select{width:100%;padding:5px 6px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+.chiplist{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.chip{background:var(--brand-lt);color:var(--brand-dk);padding:4px 10px;border-radius:20px;font-size:12.5px;display:flex;align-items:center;gap:6px}
+.chip .x{cursor:pointer;font-weight:700;color:var(--red)}
+.addrow-inline{display:flex;gap:6px;margin-top:6px}
+.addrow-inline select,.addrow-inline input{padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+.filebox{border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center;font-size:13px;color:var(--sub);cursor:pointer}
+.filethumbs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.filethumbs .f{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:6px;background:#fafaf8}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--brand-dk);color:#fff;padding:11px 20px;border-radius:30px;font-size:13.5px;z-index:99;opacity:0;transition:opacity .25s;max-width:90%;text-align:center}
+.toast.show{opacity:1}
+.toast.error{background:var(--red)}
+footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.section-head h2{font-size:16px;margin:0;color:var(--brand-dk)}
+.summary-strip{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.summary-strip .s{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-size:12.5px;color:var(--sub)}
+.summary-strip .s b{display:block;font-size:17px;color:var(--ink)}
+.expense-report-table tbody tr.expense-selected{background:#eef5ff;}
+.expense-report-table tfoot th{font-weight:700;border-top:2px solid #cfd6df;}
+</style>
+</head>
+<body>
+
+<header>
+  <div><h1>ASM Rent Manager</h1><div class="tag">Powered by A.S.M Consultancy Service · Chidambaram</div></div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="rent">Rent</button>
+  <button class="tab-btn" data-tab="property">Property</button>
+  <button class="tab-btn" data-tab="backup">Backup / Restore</button>
+</nav>
+
+<main>
+
+  <!-- ============ RENT SECTION ============ -->
+  <section id="sec-rent" class="section active">
+    <div class="summary-strip" id="rentSummaryStrip"></div>
+    <div class="toolbar">
+      <input type="text" id="rentSearch" placeholder="Search tenant, property, mobile...">
+      <button class="btn secondary" onclick="openReportScope('rent')">View/PDF</button>
+      <button class="btn" onclick="openRentForm()">+ Add Tenant</button>
+    </div>
+    <div id="rentList"></div>
+  </section>
+
+  <!-- ============ PROPERTY SECTION ============ -->
+  <section id="sec-property" class="section">
+    <div class="toolbar">
+      <input type="text" id="propSearch" placeholder="Search property, address...">
+      <button class="btn secondary" onclick="openReportScope('property')">View/PDF</button>
+      <button class="btn" onclick="openPropertyForm()">+ Add Property</button>
+    </div>
+    <div id="propList"></div>
+  </section>
+
+  <!-- ============ BACKUP SECTION ============ -->
+  <section id="sec-backup" class="section">
+    <div class="card">
+      <h3 style="margin-top:0">Backup</h3>
+      <p class="sub" style="margin-top:-4px">Download all Property and Rent data as one backup file.</p>
+      <button class="btn" onclick="doBackup()">Download Backup</button>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Restore</h3>
+      <p class="sub" style="margin-top:-4px">Restore from a previously downloaded backup file. This replaces current data.</p>
+      <input type="file" id="restoreFile" accept=".json" style="margin-bottom:8px">
+      <br><button class="btn secondary" onclick="doRestore()">Restore from File</button>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Reset All Data</h3>
+      <p class="sub" style="margin-top:-4px">Erases every Property and Rent record on this device. Take a backup first.</p>
+      <button class="btn danger" onclick="doReset()">Reset All Data</button>
+    </div>
+  </section>
+
+</main>
+<footer>Powered by A.S.M Consultancy Service · Chidambaram</footer>
+<div class="toast" id="toast"></div>
+<div class="dp-popup" id="dpPopup"></div>
+<div class="menu-popup" id="menuPopup"></div>
+
+<!-- ============ CONFIRM MODAL (used for all deletes) ============ -->
+<div class="modal-bg" id="confirmBg"><div class="modal" style="max-width:380px">
+  <h2 id="confirmTitle">Confirm Delete</h2>
+  <p class="sub" id="confirmMsg"></p>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('confirmBg')">Cancel</button>
+    <button class="btn danger" id="confirmOkBtn" onclick="runConfirmedAction()">Delete</button>
+  </div>
+</div></div>
+
+<!-- ============ REPORT SCOPE MODAL (used by both View/PDF toolbar buttons) ============ -->
+<div class="modal-bg" id="reportScopeBg" style="align-items:center"><div class="modal" style="max-width:360px">
+  <h2 id="reportScopeTitle">Report Scope</h2>
+  <div class="field"><label>Scope</label>
+    <select id="reportScopeMode" onchange="toggleReportScopeMode()">
+      <option value="all">All Properties</option>
+      <option value="location">By Location</option>
+      <option value="property">By Property</option>
+    </select>
+  </div>
+  <div class="field" id="reportScopeLocationWrap" style="display:none">
+    <label>Location</label>
+    <div class="searchsel"><input type="text" id="reportScopeLocationSearch" placeholder="Type location..." oninput="filterTypeOptsGeneric('reportScopeLocationSearch','reportScopeLocationVal','reportScopeLocationOpts','location')" onfocus="filterTypeOptsGeneric('reportScopeLocationSearch','reportScopeLocationVal','reportScopeLocationOpts','location')">
+      <input type="hidden" id="reportScopeLocationVal">
+      <div class="opts" id="reportScopeLocationOpts"></div>
+    </div>
+  </div>
+  <div class="field" id="reportScopePropertyWrap" style="display:none">
+    <label>Property</label>
+    <div class="searchsel"><input type="text" id="reportScopePropSearch" placeholder="Type property name..." oninput="filterReportScopeProps()" onfocus="filterReportScopeProps()">
+      <input type="hidden" id="reportScopePropVal">
+      <div class="opts" id="reportScopePropOpts"></div>
+    </div>
+  </div>
+  <div class="modal-actions" style="justify-content:space-between">
+    <button class="btn secondary" id="reportScopeVacateHistoryBtn" onclick="generateScopedVacateHistory()" style="display:none">Vacate History</button>
+    <div style="display:flex;gap:8px;margin-left:auto">
+      <button class="btn secondary" onclick="closeModal('reportScopeBg')">Cancel</button>
+      <button class="btn" onclick="generateScopedReport()">Generate PDF</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ============ PROPERTY FORM MODAL ============ -->
+<div class="modal-bg" id="propModalBg"><div class="modal">
+  <h2 id="propModalTitle">Add Property</h2>
+  <input type="hidden" id="propId">
+  <div class="field"><label>Property Name <span class="req">*</span> (must be unique)</label><input type="text" id="propName"></div>
+  <div class="field"><label>Address <span class="req">*</span></label><textarea id="propAddress"></textarea></div>
+  <div class="field"><label>Location</label>
+    <div class="searchsel"><input type="text" id="propLocationSearch" placeholder="Type or add a location (e.g. Cuddalore)..." oninput="filterTypeOptsGeneric('propLocationSearch','propLocation','propLocationOpts','location')" onfocus="filterTypeOptsGeneric('propLocationSearch','propLocation','propLocationOpts','location')">
+      <input type="hidden" id="propLocation">
+      <div class="opts" id="propLocationOpts"></div>
+    </div>
+  </div>
+  <div class="field"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)"><input type="checkbox" id="propOwnOcc" style="width:auto"> Own Occupation (owner-occupied — no rent tenant, won't appear in Rent module)</label></div>
+
+  <div class="field"><label>Linked Property? (shares Tax/Water/Drainage No. with a Main property — e.g. Ground Floor & First Floor of the same building)</label>
+    <select id="propIsLinked" onchange="togglePropLinked()"><option value="no">No — Standalone property</option><option value="yes">Yes — This is a portion of another property</option></select>
+  </div>
+  <div class="field" id="propLinkedMainWrap" style="display:none">
+    <label>Main Property <span class="req">*</span></label>
+    <div class="searchsel"><input type="text" id="propMainSearch" placeholder="Type to search main property..." oninput="filterMainPropOpts()" onfocus="filterMainPropOpts()">
+      <input type="hidden" id="propMainId">
+      <div class="opts" id="propMainOpts"></div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>EB Number</label><input type="text" id="propEB">
+  </div>
+
+  <h3>Tax / Account Numbers</h3>
+  <div class="chiplist" id="propTaxNumChips"></div>
+  <div class="addrow-inline">
+    <div class="searchsel" style="flex:1;min-width:0"><input type="text" id="propTaxNumTypeSearch" placeholder="Type..." oninput="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')" onfocus="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')">
+      <input type="hidden" id="propTaxNumType">
+      <div class="opts" id="propTaxNumTypeOpts"></div>
+    </div>
+    <input type="text" id="propTaxNumValue" placeholder="Number" style="flex:1;min-width:0">
+    <button class="btn small" onclick="addPropTaxNumber()">Add</button>
+  </div>
+  <p class="sub" id="propLinkedNote" style="display:none">Any Type not listed above is automatically inherited from the Main property's own list. Add a Type here only when this portion needs its own separate number for it.</p>
+
+  <h3>Property Materials (fixed fittings)</h3>
+  <div class="chiplist" id="propMaterialsChips"></div>
+  <div class="addrow-inline">
+    <input type="text" id="propMaterialInput" placeholder="e.g. Key, Tube Light, A/C, Motor" style="flex:1">
+    <button class="btn small" onclick="addPropertyMaterial()">Add</button>
+  </div>
+
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('propModalBg')">Cancel</button>
+    <button class="btn" onclick="saveProperty()">Save Property</button>
+  </div>
+</div></div>
+
+<!-- ============ PROPERTY DETAIL / VIEW MODAL ============ -->
+<div class="modal-bg" id="propViewBg"><div class="modal" style="max-width:720px">
+  <h2 id="propViewTitle">Property</h2>
+  <div id="propViewBody"></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('propViewBg')">Close</button>
+  </div>
+</div></div>
+
+<!-- ============ EXPENSE ADD/EDIT MODAL ============ -->
+<div class="modal-bg" id="expenseFormBg" style="align-items:center"><div class="modal" style="max-width:340px">
+  <h2 id="expenseFormTitle">Add Expense</h2>
+  <input type="hidden" id="expensePropId">
+  <input type="hidden" id="expenseId">
+  <div class="field"><label>Date</label><div class="daterow"><input type="text" id="expenseDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('expenseDate', event)">📅</div></div></div>
+  <div class="grid2">
+    <div class="field"><label>Amount</label><input type="number" id="expenseAmount"></div>
+    <div class="field"><label>Type</label><select id="expenseType"><option>Cash</option><option>UPI</option><option>Bank</option></select></div>
+  </div>
+  <div class="field"><label>Remarks</label><textarea id="expenseRemarks" placeholder="What was this expense for?"></textarea></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="cancelExpenseForm()">Cancel</button>
+    <button class="btn" onclick="saveExpense()">Save Expense</button>
+  </div>
+</div></div>
+
+<!-- ============ MAINTENANCE / EXPENSE REPORT MODAL ============ -->
+<div class="modal-bg" id="expenseViewBg" style="align-items:center"><div class="modal" style="max-width:760px;width:96%">
+  <h2 id="expenseViewTitle">Maintenance — Expenses</h2>
+  <div id="expenseViewBody"></div>
+  <div class="modal-actions" style="flex-wrap:wrap">
+    <button class="btn secondary small" id="expenseAddBtn">Add</button>
+    <button class="btn secondary small" id="expenseEditBtn">Edit</button>
+    <button class="btn secondary small" id="expenseViewPdfBtn">View PDF</button>
+    <button class="btn secondary small" id="expenseDownloadBtn">Download PDF</button>
+    <button class="btn danger small" id="expenseDeleteBtn">Delete</button>
+    <button class="btn secondary" onclick="closeModal('expenseViewBg')">Close</button>
+  </div>
+</div></div>
+
+
+<!-- ============ TAX PAYMENT MODAL ============ -->
+<div class="modal-bg" id="taxPayBg" style="align-items:center"><div class="modal" style="max-width:340px">
+  <h2>Add Tax / Account Payment</h2>
+  <input type="hidden" id="taxPayPropId">
+  <div class="field"><label>Type</label>
+    <div class="searchsel"><input type="text" id="taxPayTypeSearch" placeholder="Type to search or add..." oninput="filterTaxTypeOpts()" onfocus="filterTaxTypeOpts()">
+      <input type="hidden" id="taxPayType">
+      <div class="opts" id="taxPayTypeOpts"></div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Account / Reference No.</label><input type="text" id="taxPayRefNo" placeholder="New number, if changed"></div>
+    <div class="field"><label>Amount Paid</label><input type="number" id="taxPayAmt"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Payment Type</label><select id="taxPayMode"><option>Cash</option><option>UPI</option><option>Bank</option></select></div>
+    <div class="field"><label>Receipt No.</label><input type="text" id="taxPayReceipt"></div>
+  </div>
+  <div class="field"><label>Date</label><div class="daterow"><input type="text" id="taxPayDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('taxPayDate', event)">📅</div></div></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('taxPayBg')">Cancel</button>
+    <button class="btn" onclick="saveTaxPayment()">Save Payment</button>
+  </div>
+</div></div>
+
+<!-- ============ SOLD MODAL ============ -->
+<div class="modal-bg" id="soldBg"><div class="modal">
+  <h2>Mark Property as Sold</h2>
+  <input type="hidden" id="soldPropId">
+  <div class="field"><label>Buyer Name</label><input type="text" id="soldBuyer"></div>
+  <div class="field"><label>Sale Amount</label><input type="number" id="soldAmount"></div>
+  <div class="field"><label>Date</label><div class="daterow"><input type="text" id="soldDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('soldDate', event)">📅</div></div></div>
+  <p class="sub">Once marked Sold, this property will no longer appear when adding new tenants.</p>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('soldBg')">Cancel</button>
+    <button class="btn danger" onclick="confirmSold()">Mark Sold</button>
+  </div>
+</div></div>
+
+<!-- ============ RENT FORM MODAL ============ -->
+<div class="modal-bg" id="rentModalBg"><div class="modal" style="max-width:700px">
+  <h2 id="rentModalTitle">Add Tenant</h2>
+  <input type="hidden" id="rentId">
+  <div class="field"><label>Property <span class="req">*</span></label>
+    <div class="searchsel"><input type="text" id="rentPropSearch" placeholder="Type to search property..." oninput="filterPropOpts()" onfocus="filterPropOpts()">
+      <input type="hidden" id="rentPropId">
+      <div class="opts" id="rentPropOpts"></div>
+    </div>
+    <div class="sub" id="rentPropInfo" style="margin-top:6px"></div>
+  </div>
+  <div class="field"><label>Tenant Name <span class="req">*</span></label><input type="text" id="rentTenantName"></div>
+  <div class="field"><label>Permanent Address</label><textarea id="rentTenantAddr"></textarea></div>
+  <div class="grid2">
+    <div class="field"><label>Mobile No. 1 <span class="req">*</span></label><input type="text" id="rentMobile1"></div>
+    <div class="field"><label>Mobile No. 2</label><input type="text" id="rentMobile2"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Advance Amount</label><input type="number" id="rentAdvAmt"></div>
+    <div class="field"><label>Advance Date</label><div class="daterow"><input type="text" id="rentAdvDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rentAdvDate', event)">📅</div></div></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Advance Payment Type</label><select id="rentAdvType"><option>Cash</option><option>UPI</option><option>Bank</option></select></div>
+    <div class="field"><label>Advance Note</label><input type="text" id="rentAdvNote" placeholder="Optional note"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Monthly Rent <span class="req">*</span></label><input type="number" id="rentMonthly"></div>
+    <div class="field" id="rentDueDateWrap"><label>Rent Due Date <span class="req">*</span></label><div class="daterow"><input type="text" id="rentDueDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rentDueDate', event)">📅</div></div></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>ID Proof Type</label><select id="rentIdType"><option>Aadhaar</option><option>Voter ID</option><option>PAN</option><option>Driving Licence</option><option>Other</option></select></div>
+    <div class="field"><label>ID Proof Number</label><input type="text" id="rentIdNo"></div>
+  </div>
+  <div class="field"><label>Upload ID Proof / Photo (up to 3 files, image or PDF)</label>
+    <div class="filebox" onclick="document.getElementById('rentFileInput').click()">Tap to add file</div>
+    <input type="file" id="rentFileInput" accept="image/*,.pdf" style="display:none" onchange="addRentFile(event)">
+    <div class="filethumbs" id="rentFileThumbs"></div>
+  </div>
+
+  <h3>Materials Given</h3>
+  <div class="addrow-inline">
+    <select id="rentMatSelect" style="flex:1"><option value="">Select material from property...</option></select>
+    <input type="number" id="rentMatQty" placeholder="Qty" style="width:70px" value="1">
+    <button class="btn small" onclick="addRentMaterial()">Add</button>
+  </div>
+  <div class="chiplist" id="rentMaterialsChips"></div>
+
+  <div class="field"><label>Remarks</label><textarea id="rentRemarks"></textarea></div>
+
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('rentModalBg')">Cancel</button>
+    <button class="btn" onclick="saveRent()">Save Tenant</button>
+  </div>
+</div></div>
+
+<!-- ============ RENT DETAIL / LEDGER MODAL ============ -->
+<div class="modal-bg" id="rentViewBg"><div class="modal" style="max-width:780px">
+  <h2 id="rentViewTitle">Tenant</h2>
+  <div id="rentViewBody"></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('rentViewBg')">Close</button>
+  </div>
+</div></div>
+
+<!-- ============ LEDGER ROW NOTE MODAL ============ -->
+<div class="modal-bg" id="noteBg"><div class="modal" style="max-width:360px">
+  <h2>Row Note</h2>
+  <div class="field"><textarea id="noteText" rows="3" placeholder="e.g. paid late, partial payment, etc."></textarea></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('noteBg')">Cancel</button>
+    <button class="btn" onclick="saveNoteEditor()">Save Note</button>
+  </div>
+</div></div>
+
+<!-- ============ VACATE MODAL ============ -->
+<div class="modal-bg" id="vacateBg"><div class="modal">
+  <h2>Vacate Tenant</h2>
+  <input type="hidden" id="vacateRentId">
+  <div class="field"><label>Vacate Date</label><div class="daterow"><input type="text" id="vacateDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('vacateDate', event)">📅</div></div></div>
+  <div class="grid2">
+    <div class="field"><label>Advance to Return</label><input type="number" id="vacateAdvReturn" value="0"></div>
+    <div class="field"><label>Rent Balance Due</label><input type="number" id="vacateRentBal" value="0"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Materials Return Value (deduction)</label><input type="number" id="vacateMatReturn" value="0"></div>
+    <div class="field"><label>Other Claim / Damage</label><input type="number" id="vacateClaim" value="0"></div>
+  </div>
+  <div class="field"><label>Handover Payment Type</label><select id="vacateHandoverType"><option>Cash</option><option>UPI</option><option>Bank</option></select></div>
+  <div class="field"><b>Net Amount to Handover: ₹<span id="vacateNet">0</span></b></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('vacateBg')">Cancel</button>
+    <button class="btn danger" onclick="confirmVacate()">Confirm Vacate</button>
+  </div>
+</div></div>
+
+<script>
+/* ===================== DATA LAYER ===================== */
+const LS_PROP='asm_rm2_properties', LS_RENT='asm_rm2_rents';
+function loadProps(){return JSON.parse(localStorage.getItem(LS_PROP)||'[]')}
+function saveProps(a){return saveToStorage(LS_PROP,a)}
+function loadRents(){return JSON.parse(localStorage.getItem(LS_RENT)||'[]')}
+function saveRents(a){return saveToStorage(LS_RENT,a)}
+function uid(){return 'id'+Date.now()+Math.floor(Math.random()*10000)}
+/* Safe output helpers: esc() for text/attributes placed in innerHTML, jsq() for a value passed as a JS string inside an onclick="" attribute */
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function jsq(s){ return esc(JSON.stringify(String(s==null?'':s))); }
+
+function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.classList.toggle('error',!!isError);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?4500:2200)}
+function openTenantFile(rentId, idx){
+  const r=loadRents().find(x=>x.id===rentId);
+  const f=r && r.files && r.files[idx];
+  if(!f){ toast('File not found', true); return; }
+  const w=window.open('', '_blank');
+  if(!w){ toast('Could not open the file — check your browser popup settings.', true); return; }
+  if(f.type && f.type.startsWith('image/')){
+    w.document.write(`<title>${esc(f.name)}</title><body style="margin:0;background:#111"><img src="${f.dataUrl}" style="max-width:100%;display:block;margin:auto"></body>`);
+  } else {
+    w.location.href = f.dataUrl;
+  }
+}
+function saveToStorage(key,arr){
+  try{ localStorage.setItem(key, JSON.stringify(arr)); return true; }
+  catch(e){
+    toast('Save failed — device storage is full. Remove a large photo/PDF and try again.', true);
+    return false;
+  }
+}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+function openModalEl(id){document.getElementById(id).classList.add('show')}
+
+/* ===================== DATE HELPERS ===================== */
+function todayDMY(){const t=new Date();return String(t.getDate()).padStart(2,'0')+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+t.getFullYear();}
+function todayDMYFile(){return todayDMY();}
+function dmyToDate(s){ if(!s) return null; const parts=s.split('-'); if(parts.length!==3) return null; const [d,m,y]=parts.map(Number); if(!d||!m||!y) return null; return new Date(y,m-1,d); }
+
+/* ---- Custom calendar popup (works in any browser/WebView, no native <input type=date> dependency) ---- */
+let dpTargetField=null, dpViewDate=new Date();
+function openDatePicker(fieldId, evt){
+  evt.stopPropagation();
+  dpTargetField=fieldId;
+  const existing=dmyToDate(document.getElementById(fieldId).value);
+  dpViewDate = existing || new Date();
+  renderDatePicker();
+  const popup=document.getElementById('dpPopup');
+  const rect=evt.currentTarget.getBoundingClientRect();
+  let left = window.scrollX + rect.right - 205;
+  if(left < 8) left = window.scrollX + rect.left;
+  popup.style.top = (window.scrollY + rect.bottom + 6) + 'px';
+  popup.style.left = left + 'px';
+  popup.classList.add('show');
+}
+function renderDatePicker(){
+  const y=dpViewDate.getFullYear(), m=dpViewDate.getMonth();
+  const first=new Date(y,m,1);
+  const startDow=first.getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const today=new Date();
+  const selD=dmyToDate(document.getElementById(dpTargetField).value);
+  let html=`<div class="dp-head"><button type="button" onclick="dpNav(-1)">‹</button><span class="lbl">${monthNames[m]} ${y}</span><button type="button" onclick="dpNav(1)">›</button></div>`;
+  html+='<div class="dp-grid">';
+  ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d=>html+=`<div class="dow">${d}</div>`);
+  for(let i=0;i<startDow;i++) html+='<div class="blank">.</div>';
+  for(let d=1; d<=daysInMonth; d++){
+    let cls='day';
+    if(today.getFullYear()===y&&today.getMonth()===m&&today.getDate()===d) cls+=' today';
+    if(selD&&selD.getFullYear()===y&&selD.getMonth()===m&&selD.getDate()===d) cls+=' sel';
+    html+=`<div class="${cls}" onclick="dpSelect(${d})">${d}</div>`;
+  }
+  html+='</div>';
+  html+=`<div class="dp-foot"><button type="button" onclick="dpToday()">Today</button><button type="button" onclick="closeDatePicker()">Close</button></div>`;
+  document.getElementById('dpPopup').innerHTML=html;
+}
+function dpNav(delta){ dpViewDate=new Date(dpViewDate.getFullYear(), dpViewDate.getMonth()+delta, 1); renderDatePicker(); }
+function dpSelect(day){
+  const y=dpViewDate.getFullYear(), m=dpViewDate.getMonth();
+  const dd=String(day).padStart(2,'0'), mm=String(m+1).padStart(2,'0');
+  document.getElementById(dpTargetField).value=`${dd}-${mm}-${y}`;
+  if(dpTargetField==='vacateAdvReturn'||dpTargetField==='vacateRentBal') recalcVacateNet();
+  closeDatePicker();
+}
+function dpToday(){ document.getElementById(dpTargetField).value=todayDMY(); closeDatePicker(); }
+function closeDatePicker(){ document.getElementById('dpPopup').classList.remove('show'); dpTargetField=null; }
+
+/* ---- Small action dropdown menu (used by View PDF / Download on Tenant and Property screens) ---- */
+function openMenuPopup(evt, items){
+  evt.stopPropagation();
+  const menu=document.getElementById('menuPopup');
+  menu.innerHTML = items.map(it=>`<div class="mi" onclick="closeMenuPopup();${it.action}">${esc(it.label)}</div>`).join('');
+  const rect=evt.currentTarget.getBoundingClientRect();
+  let left = window.scrollX + rect.left;
+  const menuW = 190;
+  if(left + menuW > window.scrollX + window.innerWidth - 8) left = window.scrollX + window.innerWidth - menuW - 8;
+  menu.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+  menu.style.left = left + 'px';
+  menu.classList.add('show');
+}
+function closeMenuPopup(){ document.getElementById('menuPopup').classList.remove('show'); }
+document.addEventListener('click',(e)=>{ if(!e.target.closest('#menuPopup') && !e.target.closest('.menu-trigger')) closeMenuPopup(); });
+document.addEventListener('click', function(e){
+  if(dpTargetField && !e.target.closest('#dpPopup') && !e.target.closest('.cal')) closeDatePicker();
+});
+
+/* ---- Generic delete confirmation ---- */
+let confirmCallback=null;
+function askConfirm(msg, cb, okLabel, title){
+  document.getElementById('confirmTitle').textContent = title || 'Confirm Delete';
+  document.getElementById('confirmOkBtn').textContent = okLabel || 'Delete';
+  document.getElementById('confirmMsg').textContent=msg;
+  confirmCallback=cb;
+  openModalEl('confirmBg');
+}
+function runConfirmedAction(){
+  if(confirmCallback) confirmCallback();
+  closeModal('confirmBg');
+}
+
+/* ===================== TABS ===================== */
+document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.getElementById('sec-'+b.dataset.tab).classList.add('active');
+  if(b.dataset.tab==='rent')renderRentList();
+  if(b.dataset.tab==='property')renderPropList();
+}));
+
+/* ===================== PROPERTY: CRUD ===================== */
+let editPropMaterials=[];
+let editPropTaxNumbers=[];
+function togglePropLinked(){
+  const isLinked = document.getElementById('propIsLinked').value==='yes';
+  document.getElementById('propLinkedMainWrap').style.display = isLinked?'block':'none';
+  document.getElementById('propLinkedNote').style.display = isLinked?'block':'none';
+}
+function filterMainPropOpts(){
+  const q=document.getElementById('propMainSearch').value.toLowerCase();
+  const selfId=document.getElementById('propId').value;
+  const props=loadProps().filter(p=>p.id!==selfId && !p.linkedTo && p.status!=='Sold').filter(p=>p.name.toLowerCase().includes(q));
+  const box=document.getElementById('propMainOpts');
+  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectMainProp('${p.id}')">${esc(p.name)}<div class="sm">${esc(p.address)}</div></div>`).join('') || '<div class="opt sub">No matching properties</div>';
+  box.classList.add('show');
+}
+function selectMainProp(id){
+  const p=loadProps().find(x=>x.id===id);
+  document.getElementById('propMainId').value=id;
+  document.getElementById('propMainSearch').value=p.name;
+  document.getElementById('propMainOpts').classList.remove('show');
+}
+function openPropertyForm(id){
+  editPropMaterials=[];
+  editPropTaxNumbers=[];
+  document.getElementById('propId').value=id||'';
+  document.getElementById('propModalTitle').textContent = id? 'Edit Property':'Add Property';
+  document.getElementById('propIsLinked').value='no';
+  document.getElementById('propMainId').value='';
+  document.getElementById('propMainSearch').value='';
+  document.getElementById('propOwnOcc').checked=false;
+  document.getElementById('propLocationSearch').value='';
+  document.getElementById('propLocation').value='';
+  if(id){
+    const p=loadProps().find(x=>x.id===id);
+    document.getElementById('propName').value=p.name;
+    document.getElementById('propAddress').value=p.address;
+    document.getElementById('propEB').value=p.ebNumber||'';
+    document.getElementById('propOwnOcc').checked=!!p.ownOccupation;
+    document.getElementById('propLocationSearch').value=p.location||'';
+    document.getElementById('propLocation').value=p.location||'';
+    editPropMaterials=[...(p.materials||[])];
+    editPropTaxNumbers=[...(p.taxNumbers||[])];
+    if(p.linkedTo){
+      document.getElementById('propIsLinked').value='yes';
+      const main=loadProps().find(x=>x.id===p.linkedTo);
+      document.getElementById('propMainId').value=p.linkedTo;
+      document.getElementById('propMainSearch').value=main?main.name:'';
+    }
+  } else {
+    ['propName','propAddress','propEB'].forEach(f=>document.getElementById(f).value='');
+  }
+  togglePropLinked();
+  renderPropMaterialsChips();
+  renderPropTaxNumChips();
+  openModalEl('propModalBg');
+}
+function addPropTaxNumber(){
+  const type=document.getElementById('propTaxNumType').value;
+  const num=document.getElementById('propTaxNumValue').value.trim();
+  if(!type){toast('Select a Type');return;}
+  if(!num){toast('Enter the Number');return;}
+  const existing=editPropTaxNumbers.find(t=>t.type===type);
+  if(existing){ existing.number=num; } else { editPropTaxNumbers.push({id:uid(), type, number:num}); }
+  document.getElementById('propTaxNumTypeSearch').value='';
+  document.getElementById('propTaxNumType').value='';
+  document.getElementById('propTaxNumValue').value='';
+  renderPropTaxNumChips();
+}
+function removePropTaxNumber(id){
+  editPropTaxNumbers=editPropTaxNumbers.filter(t=>t.id!==id);
+  renderPropTaxNumChips();
+}
+function renderPropTaxNumChips(){
+  document.getElementById('propTaxNumChips').innerHTML = editPropTaxNumbers.map(t=>
+    `<span class="chip">${esc(t.type)}: ${esc(t.number)} <span class="x" onclick="removePropTaxNumber('${t.id}')">×</span></span>`
+  ).join('') || '<span class="sub">None added yet</span>';
+}
+function addPropertyMaterial(){
+  const inp=document.getElementById('propMaterialInput');
+  const v=inp.value.trim();
+  if(!v)return;
+  editPropMaterials.push({id:uid(),name:v});
+  inp.value='';
+  renderPropMaterialsChips();
+}
+function removePropertyMaterial(id){
+  editPropMaterials=editPropMaterials.filter(m=>m.id!==id);
+  renderPropMaterialsChips();
+}
+function renderPropMaterialsChips(){
+  document.getElementById('propMaterialsChips').innerHTML = editPropMaterials.map(m=>
+    `<span class="chip">${esc(m.name)} <span class="x" onclick="removePropertyMaterial('${m.id}')">×</span></span>`
+  ).join('') || '<span class="sub">No materials added yet</span>';
+}
+function saveProperty(){
+  const name=document.getElementById('propName').value.trim();
+  const address=document.getElementById('propAddress').value.trim();
+  if(!name||!address){toast('Name and Address are required');return;}
+  const id=document.getElementById('propId').value;
+  const isLinked = document.getElementById('propIsLinked').value==='yes';
+  const mainId = document.getElementById('propMainId').value;
+  if(isLinked && !mainId){toast('Select the Main property this is linked to');return;}
+  let props=loadProps();
+  const dup=props.find(p=>p.name.toLowerCase()===name.toLowerCase() && p.id!==id);
+  if(dup){toast('A property with this name already exists');return;}
+  const existing = id ? props.find(p=>p.id===id) : null;
+  const ownOcc = document.getElementById('propOwnOcc').checked;
+  if(ownOcc && id){
+    const hasActiveTenant = loadRents().some(r=>r.propertyId===id && r.status==='Active');
+    if(hasActiveTenant){ toast('Cannot mark Own Occupation — this property has an active tenant. Vacate them first.', true); return; }
+  }
+  const data={
+    id: id||uid(),
+    name, address,
+    ebNumber: document.getElementById('propEB').value.trim(),
+    location: document.getElementById('propLocationSearch').value.trim(),
+    linkedTo: isLinked ? mainId : null,
+    ownOccupation: ownOcc,
+    taxNumbers: editPropTaxNumbers,
+    materials: editPropMaterials,
+    taxPayments: existing ? existing.taxPayments||[] : [],
+    status: existing ? existing.status : 'Active',
+    soldInfo: existing ? existing.soldInfo : null
+  };
+  if(id){ props=props.map(p=>p.id===id?data:p) } else { props.push(data) }
+  if(data.location){ const locs=loadLocations(); if(!locs.some(l=>l.toLowerCase()===data.location.toLowerCase())){ locs.push(data.location); saveLocations(locs); } }
+  if(!saveProps(props)) return;
+  closeModal('propModalBg');
+  renderPropList();
+  toast('Property saved');
+}
+function getMergedTaxNumbers(p){
+  const main = p.linkedTo ? loadProps().find(x=>x.id===p.linkedTo) : null;
+  const ownTypes = new Set((p.taxNumbers||[]).map(t=>t.type));
+  const merged = (p.taxNumbers||[]).map(t=>({type:t.type, number:t.number, inherited:false, source:p}));
+  if(main){
+    (main.taxNumbers||[]).forEach(t=>{
+      if(!ownTypes.has(t.type)) merged.push({type:t.type, number:t.number, inherited:true, source:main});
+    });
+  }
+  return merged;
+}
+function getLastPaymentForType(prop, type){
+  const list=(prop.taxPayments||[]).filter(t=>t.type===type);
+  return list.length ? list[list.length-1] : null;
+}
+function renderPropList(){
+  const q=(document.getElementById('propSearch').value||'').toLowerCase();
+  let props=loadProps().filter(p=> p.name.toLowerCase().includes(q) || (p.address||'').toLowerCase().includes(q) || (p.location||'').toLowerCase().includes(q));
+  props.sort((a,b)=>a.name.localeCompare(b.name));
+  const el=document.getElementById('propList');
+  if(!props.length){el.innerHTML='<div class="empty">No properties yet. Tap "+ Add Property" to start.</div>';return;}
+  el.innerHTML = props.map(p=>`
+    <div class="card clickable" onclick="viewProperty('${p.id}')">
+      <div class="row1">
+        <div class="name">${esc(p.name)}</div>
+        <span class="badge ${p.status==='Sold'?'closed':'active'}">${p.status}</span>
+        ${p.ownOccupation ? '<span class="badge amber">Own Occupation</span>' : ''}
+      </div>
+      <div class="sub">${esc(p.address)}</div>
+      <div class="sub">${p.location?`📍 ${esc(p.location)} &nbsp;|&nbsp; `:''}EB: ${esc(p.ebNumber||'-')} &nbsp;|&nbsp; Materials: ${(p.materials||[]).length} ${p.linkedTo ? `&nbsp;|&nbsp; <span class="badge active">Portion of: ${esc((loadProps().find(x=>x.id===p.linkedTo)||{}).name||'(main removed)')}</span>` : ''}</div>
+    </div>`).join('');
+}
+document.getElementById('propSearch').addEventListener('input',renderPropList);
+document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { const o=document.getElementById('propMainOpts'); if(o) o.classList.remove('show'); } });
+
+function viewProperty(id){
+  const p=loadProps().find(x=>x.id===id);
+  const rents=loadRents().filter(r=>r.propertyId===id);
+  document.getElementById('propViewTitle').textContent=p.name;
+  const main = p.linkedTo ? loadProps().find(x=>x.id===p.linkedTo) : null;
+  const portions = loadProps().filter(x=>x.linkedTo===p.id);
+  const merged = getMergedTaxNumbers(p);
+  const taxNumLines = merged.map(t=>`<div><b>${esc(t.type)}:</b> ${esc(t.number)}${t.inherited?' <span class="sub">(from Main)</span>':''}</div>`).join('') || '<div class="sub">None added yet</div>';
+  const isSold = p.status==='Sold';
+  const taxRows=(p.taxPayments||[]).slice().reverse().map(t=>
+    `<tr><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td>${esc(t.refNo||'-')}</td><td>₹${esc(t.amount)}</td><td>${esc(t.mode)}</td><td>${esc(t.receipt||'-')}</td><td>${isSold?'':`<span class="x" style="cursor:pointer;color:#8C2F2F" onclick="deleteTaxPayment('${p.id}','${t.id}')">✕</span>`}</td></tr>`
+  ).join('') || '<tr><td colspan="7" class="sub">No payments recorded</td></tr>';
+  const rentRows=rents.map(r=>`<tr><td>${esc(r.tenantName)}</td><td>${r.status}</td><td>₹${esc(r.monthlyRent)}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">No tenant history</td></tr>';
+  const materials=(p.materials||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('') || '<span class="sub">None</span>';
+  document.getElementById('propViewBody').innerHTML = `
+    <div class="sub">${esc(p.address)}</div>
+    ${p.ownOccupation ? `<div class="sub" style="margin-top:4px"><span class="badge amber">Own Occupation</span> — won't appear in Rent module</div>` : ''}
+    ${main ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> Portion of <b>${esc(main.name)}</b> — Types not listed below are automatically inherited from it</div>` : ''}
+    ${portions.length ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> This is the Main property. Portion(s): ${portions.map(x=>`<b>${esc(x.name)}</b>`).join(', ')}</div>` : ''}
+    <div style="margin-top:10px"><b>EB Number:</b> ${esc(p.ebNumber||'-')}</div>
+    <div class="grid2" style="margin-top:6px">${taxNumLines}</div>
+    <h3>Materials</h3>
+    <div class="chiplist">${materials}</div>
+    <h3>Tax / Account Payment History ${isSold?'':`<button class="btn small" style="float:right" onclick="openTaxPay('${p.id}')">+ Add Payment</button>`}</h3>
+    <table class="led"><tr><th>Date</th><th>Type</th><th>Ref No.</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th></tr>${taxRows}</table>
+    <h3>Tenant History</h3>
+    <table class="led"><tr><th>Tenant</th><th>Status</th><th>Monthly Rent</th></tr>${rentRows}</table>
+    <h3>Actions</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn secondary small" onclick="closeModal('propViewBg');openPropertyForm('${p.id}')">Edit Property</button>
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, propertyPdfMenuItems('${p.id}','view'))">View PDF ▾</button>
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, propertyPdfMenuItems('${p.id}','download'))">Download ▾</button>
+      ${isSold?'':`<button class="btn secondary small" onclick="openMaintenance('${p.id}')">Maintenance</button>`}
+      ${p.status!=='Sold' ? `<button class="btn danger small" onclick="openSold('${p.id}')">Mark as Sold</button>` : `<span class="sub">Sold to ${esc(p.soldInfo?.buyerName||'')} on ${esc(p.soldInfo?.date||'')} for ₹${esc(p.soldInfo?.amount||'')}</span>`}
+      <button class="btn danger small" onclick="deleteProperty('${p.id}')">Delete Property</button>
+    </div>
+  `;
+  openModalEl('propViewBg');
+}
+function deleteProperty(id){
+  const p=loadProps().find(x=>x.id===id);
+  const portionsOfThis=loadProps().filter(x=>x.linkedTo===id);
+  if(portionsOfThis.length){
+    toast(`Cannot delete "${p.name}" — it is the Main property for: ${portionsOfThis.map(x=>x.name).join(', ')}. Delete or unlink those portions first.`, true);
+    return;
+  }
+  const linkedRents=loadRents().filter(r=>r.propertyId===id);
+  const hasHistory = linkedRents.some(r=>(r.ledger||[]).length>1);
+  if(hasHistory){
+    toast(`Cannot delete "${p.name}" — a linked tenant already has more than one rent entry recorded. Delete/clear that tenant's rent history first, or use Vacate instead.`, true);
+    return;
+  }
+  const msg = linkedRents.length
+    ? `"${p.name}" has ${linkedRents.length} tenant record(s) linked to it. Deleting the property will NOT delete those tenant records, but they'll show as (property removed). Delete "${p.name}"?`
+    : `Delete property "${p.name}"? This cannot be undone.`;
+  askConfirm(msg, ()=>{
+    const props=loadProps().filter(x=>x.id!==id);
+    if(!saveProps(props)) return;
+    closeModal('propViewBg');
+    renderPropList();
+    toast('Property deleted');
+  });
+}
+
+/* Tax payments */
+/* Extensible "type to add new" lists — reused for Tax Type and Location pickers */
+const LS_TAXTYPES='asm_rm2_taxtypes';
+const LS_LOCATIONS='asm_rm2_locations';
+function loadTaxTypes(){ return JSON.parse(localStorage.getItem(LS_TAXTYPES)||'["Property Tax","Water","Drainage","Other"]'); }
+function saveTaxTypes(a){ localStorage.setItem(LS_TAXTYPES, JSON.stringify(a)); }
+function loadLocations(){ return JSON.parse(localStorage.getItem(LS_LOCATIONS)||'[]'); }
+function saveLocations(a){ localStorage.setItem(LS_LOCATIONS, JSON.stringify(a)); }
+function getExtList(listName){ return listName==='location' ? loadLocations() : loadTaxTypes(); }
+function setExtList(listName,a){ if(listName==='location') saveLocations(a); else saveTaxTypes(a); }
+function filterTypeOptsGeneric(searchId, hiddenId, boxId, listName){
+  listName = listName||'tax';
+  const q=document.getElementById(searchId).value.trim();
+  const types=getExtList(listName).filter(t=>t.toLowerCase().includes(q.toLowerCase()));
+  const box=document.getElementById(boxId);
+  let html=types.map(t=>`<div class="opt" onclick="selectTypeGeneric('${searchId}','${hiddenId}','${boxId}',${jsq(t)},'${listName}')">${esc(t)}</div>`).join('');
+  if(q && !getExtList(listName).some(t=>t.toLowerCase()===q.toLowerCase())){
+    html+=`<div class="opt" style="color:var(--brand-dk);font-weight:600" onclick="addNewTypeGeneric('${searchId}','${hiddenId}','${boxId}',${jsq(q)},'${listName}')">+ Add "${esc(q)}" as new ${listName==='location'?'location':'type'}</div>`;
+  }
+  box.innerHTML = html || '<div class="opt sub">No match</div>';
+  box.classList.add('show');
+}
+function selectTypeGeneric(searchId,hiddenId,boxId,t){
+  document.getElementById(hiddenId).value=t;
+  document.getElementById(searchId).value=t;
+  document.getElementById(boxId).classList.remove('show');
+}
+function addNewTypeGeneric(searchId,hiddenId,boxId,t,listName){
+  listName = listName||'tax';
+  let types=getExtList(listName);
+  if(!types.some(x=>x.toLowerCase()===t.toLowerCase())){ types.push(t); setExtList(listName,types); }
+  selectTypeGeneric(searchId,hiddenId,boxId,t);
+}
+document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { ['taxPayTypeOpts','propTaxNumTypeOpts','propLocationOpts','reportScopeLocationOpts','reportScopePropOpts'].forEach(id=>{ const o=document.getElementById(id); if(o) o.classList.remove('show'); }); } });
+function openTaxPay(propId){
+  document.getElementById('taxPayPropId').value=propId;
+  ['taxPayRefNo','taxPayAmt','taxPayReceipt'].forEach(f=>document.getElementById(f).value='');
+  document.getElementById('taxPayDate').value=todayDMY();
+  selectTypeGeneric('taxPayTypeSearch','taxPayType','taxPayTypeOpts','Property Tax');
+  openModalEl('taxPayBg');
+}
+function saveTaxPayment(){
+  const propId=document.getElementById('taxPayPropId').value;
+  const amt=document.getElementById('taxPayAmt').value;
+  if(!amt){toast('Enter amount');return;}
+  let props=loadProps();
+  const p=props.find(x=>x.id===propId);
+  const type=document.getElementById('taxPayType').value;
+  const refNo=document.getElementById('taxPayRefNo').value.trim();
+  p.taxPayments=p.taxPayments||[];
+  p.taxPayments.push({
+    id:uid(), type, refNo, amount:amt,
+    mode:document.getElementById('taxPayMode').value,
+    receipt:document.getElementById('taxPayReceipt').value.trim(),
+    date:document.getElementById('taxPayDate').value
+  });
+  // if a new reference number was entered, update (or create) this property's OWN taxNumbers entry for this type
+  if(type && refNo){
+    p.taxNumbers=p.taxNumbers||[];
+    const existingNum=p.taxNumbers.find(t=>t.type===type);
+    if(existingNum){ existingNum.number=refNo; } else { p.taxNumbers.push({id:uid(), type, number:refNo}); }
+  }
+  if(!saveProps(props)) return;
+  closeModal('taxPayBg');
+  viewProperty(propId);
+  toast('Payment recorded');
+}
+function deleteTaxPayment(propId, paymentId){
+  askConfirm('Delete this payment entry? This cannot be undone.', ()=>{
+    let props=loadProps();
+    const p=props.find(x=>x.id===propId);
+    p.taxPayments=(p.taxPayments||[]).filter(t=>t.id!==paymentId);
+    if(!saveProps(props)) return;
+    viewProperty(propId);
+    toast('Payment entry deleted');
+  });
+}
+
+/* ===================== EXPENSES (per Property — Add, Edit, View/PDF, Delete, Close) ===================== */
+function cancelExpenseForm(){
+  const propId=document.getElementById('expensePropId').value;
+  closeModal('expenseFormBg');
+  if(propId){
+    openMaintenance(propId);
+  }
+}
+function openExpenseForm(propId, expenseId){
+  document.getElementById('expensePropId').value=propId;
+  document.getElementById('expenseId').value=expenseId||'';
+  document.getElementById('expenseFormTitle').textContent = expenseId ? 'Edit Expense' : 'Add Expense';
+  if(expenseId){
+    const p=loadProps().find(x=>x.id===propId);
+    const ex=(p.expenses||[]).find(x=>x.id===expenseId);
+    document.getElementById('expenseDate').value=ex.date||'';
+    document.getElementById('expenseAmount').value=ex.amount||'';
+    document.getElementById('expenseType').value=ex.type||'Cash';
+    document.getElementById('expenseRemarks').value=ex.remarks||'';
+  } else {
+    document.getElementById('expenseDate').value=todayDMY();
+    document.getElementById('expenseAmount').value='';
+    document.getElementById('expenseType').value='Cash';
+    document.getElementById('expenseRemarks').value='';
+  }
+  openModalEl('expenseFormBg');
+}
+function saveExpense(){
+  const propId=document.getElementById('expensePropId').value;
+  const expenseId=document.getElementById('expenseId').value;
+  const date=document.getElementById('expenseDate').value.trim();
+  const amount=document.getElementById('expenseAmount').value;
+  if(!date){toast('Enter the Date');return;}
+  if(!amount){toast('Enter the Amount');return;}
+  let props=loadProps();
+  const p=props.find(x=>x.id===propId);
+  p.expenses=p.expenses||[];
+  const data={
+    id: expenseId||uid(),
+    date, amount,
+    type: document.getElementById('expenseType').value,
+    remarks: document.getElementById('expenseRemarks').value.trim()
+  };
+  if(expenseId){ p.expenses=p.expenses.map(x=>x.id===expenseId?data:x); } else { p.expenses.push(data); }
+  if(!saveProps(props)) return;
+  closeModal('expenseFormBg');
+  viewProperty(propId);
+  toast('Expense saved');
+}
+let selectedMaintenanceExpenseId='';
+
+function openMaintenance(propId, expenseId){
+  const p=loadProps().find(x=>x.id===propId);
+  if(!p){ toast('Property not found', true); return; }
+  const expenses=(p.expenses||[]).slice().reverse();
+  selectedMaintenanceExpenseId = expenseId || (expenses[0] ? expenses[0].id : '');
+  renderMaintenance(propId);
+  openModalEl('expenseViewBg');
+}
+
+function renderMaintenance(propId){
+  const p=loadProps().find(x=>x.id===propId);
+  if(!p) return;
+  const expenses=(p.expenses||[]).slice().reverse();
+  const total=expenses.reduce((sum,x)=>sum+(parseFloat(x.amount)||0),0);
+  const rows=expenses.map(x=>`<tr class="clickable ${x.id===selectedMaintenanceExpenseId?'expense-selected':''}" style="cursor:pointer" onclick="selectMaintenanceExpense('${propId}','${x.id}')"><td>${esc(x.date)}</td><td style="text-align:right">₹${esc(x.amount)}</td><td>${esc(x.type)}</td><td>${esc(x.remarks||'-')}</td></tr>`).join('');
+  document.getElementById('expenseViewTitle').textContent='Maintenance — Expenses';
+  document.getElementById('expenseViewBody').innerHTML=`
+    <div style="margin-bottom:10px"><b>Property:</b> ${esc(p.name)}<div class="sub">${esc(p.address||'')}</div></div>
+    <div style="overflow:auto">
+      <table class="led expense-report-table"><thead><tr><th>Date</th><th style="text-align:right">Amount</th><th>Type</th><th>Remarks</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="4" class="sub">No expenses recorded</td></tr>'}</tbody>
+      <tfoot><tr><th>Total Expenses</th><th style="text-align:right">₹${total.toFixed(2)}</th><th colspan="2"></th></tr></tfoot></table>
+    </div>`;
+  document.getElementById('expenseAddBtn').onclick=()=>{ closeModal('expenseViewBg'); openExpenseForm(propId); };
+  document.getElementById('expenseEditBtn').onclick=()=>{ if(!selectedMaintenanceExpenseId){toast('Select an expense entry first');return;} closeModal('expenseViewBg'); openExpenseForm(propId, selectedMaintenanceExpenseId); };
+  document.getElementById('expenseViewPdfBtn').onclick=()=>openExpenseReportPdf(propId);
+  document.getElementById('expenseDownloadBtn').onclick=()=>downloadExpenseReportPdf(propId);
+  document.getElementById('expenseDeleteBtn').onclick=()=>{ if(!selectedMaintenanceExpenseId){toast('Select an expense entry first');return;} deleteExpense(propId, selectedMaintenanceExpenseId); };
+}
+
+function selectMaintenanceExpense(propId, expenseId){
+  selectedMaintenanceExpenseId=expenseId;
+  renderMaintenance(propId);
+}
+
+function viewExpense(propId, expenseId){
+  openMaintenance(propId, expenseId);
+}
+
+function deleteExpense(propId, expenseId){
+  askConfirm('Delete this expense entry? This cannot be undone.', ()=>{
+    let props=loadProps();
+    const p=props.find(x=>x.id===propId);
+    p.expenses=(p.expenses||[]).filter(x=>x.id!==expenseId);
+    if(!saveProps(props)) return;
+    closeModal('expenseViewBg');
+    viewProperty(propId);
+    toast('Expense deleted');
+  });
+}
+function buildExpensePdf(propId, expenseId){
+  const p=loadProps().find(x=>x.id===propId);
+  const ex=(p.expenses||[]).find(x=>x.id===expenseId);
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Expense';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Property: ${p.name}`, 14, y); y+=8;
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Expense Details', 14, y); y+=7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Date: ${ex.date}`, 14, y); y+=6;
+  doc.text(`Amount: Rs.${ex.amount}`, 14, y); y+=6;
+  doc.text(`Type: ${ex.type}`, 14, y); y+=6;
+  doc.text('Remarks:', 14, y); y+=6;
+  doc.text(ex.remarks||'-', 14, y, {maxWidth:180}); y+=10;
+  pdfFooter(doc);
+  return {doc, filename:`${p.name.replace(/\s+/g,'_')}_Expense_${ex.date.replace(/[^0-9]/g,'')}.pdf`};
+}
+function openExpensePdf(propId, expenseId){
+  const {doc}=buildExpensePdf(propId, expenseId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download instead.', true);
+}
+function downloadExpensePdf(propId, expenseId){
+  const {doc, filename}=buildExpensePdf(propId, expenseId);
+  doc.save(filename);
+}
+function buildExpenseReportPdf(propId){
+  const p=loadProps().find(x=>x.id===propId);
+  const doc=new jspdf.jsPDF();
+  const pageTitle=`${p.name} Expense Report`;
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  const expenses=(p.expenses||[]).slice().reverse();
+  const rows=expenses.map(x=>[x.date, 'Rs.'+x.amount, x.type, x.remarks||'-']);
+  const total=expenses.reduce((sum,x)=>sum+(parseFloat(x.amount)||0),0);
+  let tableEndY=pdfTable(doc, 14, y, [30,30,28,94], ['Date','Amount','Type','Remarks'], rows.length?rows:[['No expenses recorded','-','-','-']], pageTitle);
+  let totalY=tableEndY+8;
+  if(totalY > doc.internal.pageSize.getHeight()-26){
+    doc.addPage();
+    pdfHeader(doc, pageTitle);
+    totalY=30;
+  }
+  doc.setFont(undefined,'bold');
+  doc.setFontSize(10.5);
+  doc.text('Total Expenses: Rs.'+total.toFixed(2), 14, totalY);
+  doc.setFont(undefined,'normal');
+  pdfFooter(doc);
+  return {doc, filename:`${p.name.replace(/\s+/g,'_')}_Expense_Report_${todayDMYFile()}.pdf`};
+}
+function openExpenseReportPdf(propId){
+  const {doc}=buildExpenseReportPdf(propId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download instead.', true);
+}
+function downloadExpenseReportPdf(propId){
+  const {doc, filename}=buildExpenseReportPdf(propId);
+  doc.save(filename);
+}
+
+/* Sold */
+function openSold(propId){
+  document.getElementById('soldPropId').value=propId;
+  ['soldBuyer','soldAmount'].forEach(f=>document.getElementById(f).value='');
+  document.getElementById('soldDate').value=todayDMY();
+  openModalEl('soldBg');
+}
+function confirmSold(){
+  const propId=document.getElementById('soldPropId').value;
+  let props=loadProps();
+  const p=props.find(x=>x.id===propId);
+  const activeTenant=loadRents().find(r=>r.propertyId===propId && r.status==='Active');
+  if(activeTenant){toast('Vacate the active tenant before marking Sold');return;}
+  p.status='Sold';
+  p.soldInfo={buyerName:document.getElementById('soldBuyer').value.trim(),amount:document.getElementById('soldAmount').value,date:document.getElementById('soldDate').value};
+  saveProps(props);
+  closeModal('soldBg');
+  closeModal('propViewBg');
+  renderPropList();
+  toast('Property marked as Sold');
+}
+
+/* ===================== RENT: CRUD ===================== */
+let editRentFiles=[], editRentMaterials=[], selectedRentProp=null;
+
+function openRentForm(id){
+  editRentFiles=[]; editRentMaterials=[]; selectedRentProp=null;
+  document.getElementById('rentId').value=id||'';
+  document.getElementById('rentModalTitle').textContent = id? 'Edit Tenant':'Add Tenant';
+  document.getElementById('rentPropSearch').value='';
+  document.getElementById('rentPropId').value='';
+  document.getElementById('rentPropInfo').innerHTML='';
+  document.getElementById('rentDueDateWrap').style.display = 'block';
+  if(id){
+    const r=loadRents().find(x=>x.id===id);
+    const p=loadProps().find(x=>x.id===r.propertyId);
+    document.getElementById('rentPropSearch').value=p?p.name:'';
+    document.getElementById('rentPropId').value=r.propertyId;
+    selectedRentProp=p;
+    document.getElementById('rentTenantName').value=r.tenantName;
+    document.getElementById('rentTenantAddr').value=r.permanentAddress||'';
+    document.getElementById('rentMobile1').value=r.mobile1;
+    document.getElementById('rentMobile2').value=r.mobile2||'';
+    document.getElementById('rentAdvAmt').value=r.advanceAmount||'';
+    document.getElementById('rentAdvDate').value=r.advanceDate||'';
+    document.getElementById('rentAdvType').value=r.advanceType||'Cash';
+    document.getElementById('rentAdvNote').value=r.advanceNote||'';
+    document.getElementById('rentMonthly').value=r.monthlyRent;
+    document.getElementById('rentDueDate').value = r.dueDate || (r.ledger&&r.ledger.length ? r.ledger[r.ledger.length-1].dueDate : '');
+    document.getElementById('rentIdType').value=r.idProofType||'Aadhaar';
+    document.getElementById('rentIdNo').value=r.idProofNo||'';
+    document.getElementById('rentRemarks').value=r.remarks||'';
+    editRentFiles=[...(r.files||[])];
+    editRentMaterials=[...(r.materialsGiven||[])];
+    showRentPropInfo(p);
+  } else {
+    ['rentTenantName','rentTenantAddr','rentMobile1','rentMobile2','rentAdvAmt','rentAdvDate','rentAdvNote','rentMonthly','rentDueDate','rentIdNo','rentRemarks'].forEach(f=>document.getElementById(f).value='');
+    document.getElementById('rentAdvType').value='Cash';
+  }
+  renderRentFileThumbs();
+  renderRentMaterialsChips();
+  populateRentMatSelect();
+  openModalEl('rentModalBg');
+}
+function filterPropOpts(){
+  const q=document.getElementById('rentPropSearch').value.toLowerCase();
+  const editingId=document.getElementById('rentId').value;
+  const occupiedIds=new Set(loadRents().filter(r=>r.status==='Active' && r.id!==editingId).map(r=>r.propertyId));
+  const props=loadProps().filter(p=>p.status!=='Sold' && !p.ownOccupation).filter(p=>!occupiedIds.has(p.id)).filter(p=>p.name.toLowerCase().includes(q));
+  const box=document.getElementById('rentPropOpts');
+  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectRentProp('${p.id}')">${esc(p.name)}<div class="sm">${esc(p.address)}</div></div>`).join('') || '<div class="opt sub">No matching vacant properties</div>';
+  box.classList.add('show');
+}
+document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) document.getElementById('rentPropOpts').classList.remove('show'); });
+function selectRentProp(id){
+  const p=loadProps().find(x=>x.id===id);
+  selectedRentProp=p;
+  document.getElementById('rentPropId').value=id;
+  document.getElementById('rentPropSearch').value=p.name;
+  document.getElementById('rentPropOpts').classList.remove('show');
+  showRentPropInfo(p);
+  editRentMaterials=[]; renderRentMaterialsChips();
+  populateRentMatSelect();
+}
+function showRentPropInfo(p){
+  if(!p){document.getElementById('rentPropInfo').innerHTML='';return;}
+  document.getElementById('rentPropInfo').innerHTML=`EB Number: <b>${esc(p.ebNumber||'-')}</b> &nbsp;|&nbsp; Address: ${esc(p.address)}`;
+}
+function populateRentMatSelect(){
+  const sel=document.getElementById('rentMatSelect');
+  const mats=selectedRentProp?selectedRentProp.materials||[]:[];
+  sel.innerHTML='<option value="">Select material from property...</option>'+mats.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join('');
+}
+function addRentMaterial(){
+  const sel=document.getElementById('rentMatSelect');
+  const id=sel.value; if(!id){toast('Select a material');return;}
+  const name=sel.options[sel.selectedIndex].text;
+  const qty=document.getElementById('rentMatQty').value||1;
+  const existing=editRentMaterials.find(m=>m.materialId===id);
+  if(existing){existing.qty=qty;} else {editRentMaterials.push({materialId:id,name,qty});}
+  renderRentMaterialsChips();
+}
+function removeRentMaterial(id){editRentMaterials=editRentMaterials.filter(m=>m.materialId!==id);renderRentMaterialsChips();}
+function renderRentMaterialsChips(){
+  document.getElementById('rentMaterialsChips').innerHTML = editRentMaterials.map(m=>
+    `<span class="chip">${esc(m.name)} × ${esc(m.qty)} <span class="x" onclick="removeRentMaterial('${m.materialId}')">×</span></span>`
+  ).join('') || '<span class="sub">None given yet</span>';
+}
+function addRentFile(ev){
+  const file=ev.target.files[0]; if(!file)return;
+  if(editRentFiles.length>=3){toast('Maximum 3 files allowed');return;}
+  if(file.type.startsWith('image/')){
+    compressImage(file, function(dataUrl){
+      editRentFiles.push({name:file.name,type:'image/jpeg',dataUrl});
+      renderRentFileThumbs();
+    });
+  } else {
+    if(file.size > 3*1024*1024){ toast('This PDF is larger than 3MB — it may fail to save on this device.', true); }
+    const reader=new FileReader();
+    reader.onload=function(e){
+      editRentFiles.push({name:file.name,type:file.type,dataUrl:e.target.result});
+      renderRentFileThumbs();
+    };
+    reader.readAsDataURL(file);
+  }
+  ev.target.value='';
+}
+function compressImage(file, callback){
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=function(){
+      const maxDim=1000;
+      let w=img.width, h=img.height;
+      if(w>h && w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; }
+      else if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; }
+      const canvas=document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      callback(canvas.toDataURL('image/jpeg',0.72));
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function removeRentFile(i){editRentFiles.splice(i,1);renderRentFileThumbs();}
+function renderRentFileThumbs(){
+  document.getElementById('rentFileThumbs').innerHTML = editRentFiles.map((f,i)=>
+    `<div class="f">📎 ${esc(f.name.slice(0,18))} <span class="x" style="cursor:pointer;color:#8C2F2F" onclick="removeRentFile(${i})">×</span></div>`
+  ).join('');
+}
+function saveRent(){
+  const propId=document.getElementById('rentPropId').value;
+  const tenantName=document.getElementById('rentTenantName').value.trim();
+  const mobile1=document.getElementById('rentMobile1').value.trim();
+  const monthly=document.getElementById('rentMonthly').value;
+  const dueDate=document.getElementById('rentDueDate').value.trim();
+  if(!propId){toast('Select a property');return;}
+  if(!tenantName){toast('Tenant name is required');return;}
+  if(!mobile1){toast('Mobile No. 1 is required');return;}
+  if(!monthly){toast('Monthly Rent is required');return;}
+  if(!dueDate){toast('Rent Due Date is required');return;}
+  const id=document.getElementById('rentId').value;
+  let rents=loadRents();
+  const occupiedByOther = rents.some(r=>r.propertyId===propId && r.status==='Active' && r.id!==id);
+  if(occupiedByOther){ toast('This property already has an active tenant — vacate them first.', true); return; }
+  const propRec = loadProps().find(x=>x.id===propId);
+  if(propRec && propRec.ownOccupation){ toast('This property is marked Own Occupation and cannot have a tenant.', true); return; }
+  const existing = id ? rents.find(r=>r.id===id) : null;
+  const data={
+    id: id||uid(),
+    propertyId: propId,
+    tenantName, 
+    permanentAddress: document.getElementById('rentTenantAddr').value.trim(),
+    mobile1, mobile2: document.getElementById('rentMobile2').value.trim(),
+    advanceAmount: document.getElementById('rentAdvAmt').value,
+    advanceDate: document.getElementById('rentAdvDate').value,
+    advanceType: document.getElementById('rentAdvType').value,
+    advanceNote: document.getElementById('rentAdvNote').value.trim(),
+    monthlyRent: monthly,
+    dueDate: dueDate,
+    idProofType: document.getElementById('rentIdType').value,
+    idProofNo: document.getElementById('rentIdNo').value.trim(),
+    files: editRentFiles,
+    materialsGiven: editRentMaterials,
+    remarks: document.getElementById('rentRemarks').value.trim(),
+    status: existing ? existing.status : 'Active',
+    ledger: existing ? existing.ledger||[] : [],
+    vacateInfo: existing ? existing.vacateInfo : null
+  };
+  if(!id){
+    // auto-create the first ledger row from the Rent Due Date set at creation
+    data.ledger.push({id:uid(), dueDate, amount:monthly, paidAmount:0, paidDate:'', paymentType:'Cash', note:''});
+  } else if(dueDate && data.ledger.length){
+    // editing an existing tenant: keep the most recent UNPAID row's due date in sync
+    const last=data.ledger[data.ledger.length-1];
+    const bal=(parseFloat(last.amount)||0)-(parseFloat(last.paidAmount)||0);
+    if(bal>0) last.dueDate=dueDate;
+  }
+  if(id){ rents=rents.map(r=>r.id===id?data:r) } else { rents.push(data) }
+  if(!saveRents(rents)) return;
+  closeModal('rentModalBg');
+  renderRentList();
+  toast('Tenant saved');
+}
+function renderRentSummary(){
+  const rents=loadRents();
+  const active=rents.filter(r=>r.status==='Active');
+  let totalDue=0, overdueCount=0;
+  active.forEach(r=>{
+    const st=getTenantStatus(r);
+    if(st.total>0) totalDue+=st.total;
+    if(st.status==='overdue') overdueCount++;
+  });
+  document.getElementById('rentSummaryStrip').innerHTML=`
+    <div class="s"><b>${active.length}</b>Active Tenants</div>
+    <div class="s"><b>₹${totalDue.toLocaleString('en-IN')}</b>Total Balance Due</div>
+    <div class="s"><b>${overdueCount}</b>Overdue</div>
+  `;
+}
+function currentBalance(r){
+  if(!r.ledger || !r.ledger.length) return 0;
+  const last=r.ledger[r.ledger.length-1];
+  return (parseFloat(last.amount)||0) - (parseFloat(last.paidAmount)||0);
+}
+function getTenantStatus(r){
+  if(!r.ledger || !r.ledger.length) return {total:0, status:'nodue', label:'No Due', badgeClass:'advance'};
+  const bal = currentBalance(r);
+  if(bal < 0) return {total:bal, status:'advance', label:`Advance ₹${Math.abs(bal).toLocaleString('en-IN')}`, badgeClass:'advance'};
+  if(bal === 0) return {total:0, status:'nodue', label:'No Due', badgeClass:'advance'};
+  const last=r.ledger[r.ledger.length-1];
+  const dd=dmyToDate(last.dueDate);
+  const today=new Date(); today.setHours(0,0,0,0);
+  if(dd && dd < today) return {total:bal, status:'overdue', label:`Overdue ₹${bal.toLocaleString('en-IN')}`, badgeClass:'overdue'};
+  return {total:bal, status:'due', label:`Due ₹${bal.toLocaleString('en-IN')}`, badgeClass:'amber'};
+}
+function renderRentList(){
+  const q=(document.getElementById('rentSearch').value||'').toLowerCase();
+  const props=loadProps();
+  let rents=loadRents().filter(r=>{
+    const p=props.find(x=>x.id===r.propertyId);
+    return r.tenantName.toLowerCase().includes(q) || r.mobile1.includes(q) || (p&&p.name.toLowerCase().includes(q));
+  });
+  rents.sort((a,b)=> (a.status==='Active'?0:1) - (b.status==='Active'?0:1) || a.tenantName.localeCompare(b.tenantName));
+  const el=document.getElementById('rentList');
+  renderRentSummary();
+  if(!rents.length){el.innerHTML='<div class="empty">No tenants yet. Tap "+ Add Tenant" to start.</div>';return;}
+  el.innerHTML = rents.map(r=>{
+    const p=props.find(x=>x.id===r.propertyId);
+    const st=getTenantStatus(r);
+    return `<div class="card clickable" onclick="viewRent('${r.id}')">
+      <div class="row1">
+        <div class="name">${esc(r.tenantName)}</div>
+        <span class="badge ${r.status==='Active'?'active':'closed'}">${r.status}</span>
+      </div>
+      <div class="sub">${esc(p?p.name:'(property removed)')} &nbsp;|&nbsp; ${esc(r.mobile1)}</div>
+      <div class="sub">Monthly Rent: ₹${esc(r.monthlyRent)} &nbsp;|&nbsp; <span class="badge ${st.badgeClass}">${st.label}</span></div>
+    </div>`;
+  }).join('');
+}
+document.getElementById('rentSearch').addEventListener('input',renderRentList);
+
+/* ===================== RENT VIEW / LEDGER ===================== */
+let currentRentId=null;
+function viewRent(id){
+  currentRentId=id;
+  renderRentViewBody();
+  openModalEl('rentViewBg');
+}
+function renderRentViewBody(){
+  const r=loadRents().find(x=>x.id===currentRentId);
+  const p=loadProps().find(x=>x.id===r.propertyId);
+  const st=getTenantStatus(r);
+  document.getElementById('rentViewTitle').textContent=r.tenantName;
+  const matChips=(r.materialsGiven||[]).map(m=>`<span class="chip">${esc(m.name)} × ${esc(m.qty)}</span>`).join('') || '<span class="sub">None</span>';
+  const fileChips=(r.files||[]).map((f,i)=>`<span class="chip" style="cursor:pointer" onclick="openTenantFile('${r.id}',${i})">📎 ${esc(f.name.slice(0,16))} ⤢</span>`).join('') || '<span class="sub">None</span>';
+  const ledgerRows=(r.ledger||[]).map((row,idx)=>{
+    const bal=(parseFloat(row.amount)||0)-(parseFloat(row.paidAmount)||0);
+    const hasNote = row.note && row.note.trim();
+    const dateSet = (row.paidDate||'').trim().length>0;
+    return `
+    <tr>
+      <td><input type="text" value="${esc(row.dueDate)}" onchange="updateLedgerField(${idx},'dueDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
+      <td><input type="number" value="${row.amount}" onchange="updateLedgerField(${idx},'amount',this.value)" style="width:80px"></td>
+      <td><input type="text" value="${esc(row.paidDate||'')}" onchange="updateLedgerField(${idx},'paidDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
+      <td><input type="number" value="${row.paidAmount||0}" onchange="updateLedgerField(${idx},'paidAmount',this.value)" style="width:80px${dateSet?'':';background:#EDEBE4;color:#999'}" ${dateSet?'':'disabled title="Set Paid Date first"'}></td>
+      <td><select onchange="updateLedgerField(${idx},'paymentType',this.value)">
+        ${['Cash','UPI','Bank'].map(t=>`<option ${row.paymentType===t?'selected':''}>${esc(t)}</option>`).join('')}
+      </select></td>
+      <td style="font-weight:700;color:${bal>0?'#8C2F2F':'#14532d'}">₹${bal.toFixed(2)}</td>
+      <td><span onclick="openNoteEditor(${idx})" style="cursor:pointer;color:${hasNote?'#14532d':'#B7B7AC'};font-size:15px" title="Note">📝</span></td>
+      <td><span class="x" style="cursor:pointer;color:#8C2F2F" onclick="deleteLedgerRow(${idx})">✕</span></td>
+    </tr>`;}).join('') || '<tr><td colspan="8" class="sub">No ledger rows yet — tap "Add Month" below</td></tr>';
+
+  document.getElementById('rentViewBody').innerHTML = `
+    <div class="sub">${esc(p?p.name:'(property removed)')} — ${esc(p?p.address:'')}</div>
+    <div style="margin-top:8px"><span class="badge ${st.badgeClass}" style="font-size:13px;padding:5px 12px">Account Balance: ${st.label}</span></div>
+    <div class="grid2" style="margin-top:10px">
+      <div><b>Mobile:</b> ${esc(r.mobile1)} ${r.mobile2?('/ '+esc(r.mobile2)):''}</div>
+      <div><b>EB Number:</b> ${esc(p?p.ebNumber||'-':'-')}</div>
+      <div><b>Advance:</b> ₹${esc(r.advanceAmount||0)} on ${esc(r.advanceDate||'-')} (${esc(r.advanceType||'-')})${r.advanceNote?' — '+esc(r.advanceNote):''}</div>
+      <div><b>Monthly Rent:</b> ₹${esc(r.monthlyRent)}</div>
+      <div><b>ID Proof:</b> ${esc(r.idProofType)} ${esc(r.idProofNo||'')}</div>
+      <div><b>Status:</b> ${r.status}</div>
+    </div>
+    <h3>Materials Given</h3><div class="chiplist">${matChips}</div>
+    <h3>Uploaded Files</h3><div class="chiplist">${fileChips}</div>
+    ${r.remarks?`<h3>Remarks</h3><div class="sub">${esc(r.remarks)}</div>`:''}
+
+    <h3>Monthly Rent History</h3>
+    <div style="overflow-x:auto">
+    <table class="led">
+      <tr><th>Due Date</th><th>Rent</th><th>Paid Date</th><th>Paid Amount</th><th>Type</th><th>Balance</th><th></th><th></th></tr>
+      ${ledgerRows}
+    </table>
+    </div>
+    <button class="btn small secondary" style="margin-top:8px" onclick="addLedgerRow()">+ Add Month</button>
+
+    <h3>Actions</h3>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn secondary small" onclick="closeModal('rentViewBg');openRentForm('${r.id}')">Edit Tenant</button>
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, rentPdfMenuItems('${r.id}','view'))">View PDF ▾</button>
+      <button class="btn secondary small menu-trigger" onclick="openMenuPopup(event, rentPdfMenuItems('${r.id}','download'))">Download ▾</button>
+      ${r.status==='Active'?`<button class="btn danger small" onclick="openVacate('${r.id}')">Vacate</button>`:`<span class="sub">Vacated on ${esc(r.vacateInfo?.date||'')}</span>`}
+      <button class="btn danger small" onclick="deleteRent('${r.id}')">Delete Tenant</button>
+    </div>
+  `;
+}
+function deleteRent(id){
+  const r=loadRents().find(x=>x.id===id);
+  askConfirm(`Delete tenant "${r.tenantName}" and all their ledger history? This cannot be undone.`, ()=>{
+    const rents=loadRents().filter(x=>x.id!==id);
+    if(!saveRents(rents)) return;
+    closeModal('rentViewBg');
+    renderRentList();
+    toast('Tenant deleted');
+  });
+}
+function addLedgerRow(){
+  let rents=loadRents();
+  const r=rents.find(x=>x.id===currentRentId);
+  r.ledger=r.ledger||[];
+  const prevBalance = r.ledger.length ? currentBalance(r) : 0;
+  const rent=parseFloat(r.monthlyRent)||0;
+  const newRow={id:uid(), dueDate:(r.dueDate||todayDMY()), amount:(prevBalance+rent).toFixed(2), paidAmount:0, paidDate:'', paymentType:'Cash', note:''};
+  r.ledger.push(newRow);
+  if(!saveRents(rents)) return;
+  renderRentViewBody();
+  renderRentList();
+}
+let noteRowIdx=null;
+function openNoteEditor(idx){
+  noteRowIdx=idx;
+  const r=loadRents().find(x=>x.id===currentRentId);
+  document.getElementById('noteText').value = (r.ledger[idx].note)||'';
+  openModalEl('noteBg');
+}
+function saveNoteEditor(){
+  updateLedgerField(noteRowIdx, 'note', document.getElementById('noteText').value.trim());
+  closeModal('noteBg');
+}
+function updateLedgerField(idx,field,val){
+  let rents=loadRents();
+  const r=rents.find(x=>x.id===currentRentId);
+  const row=r.ledger[idx];
+  if(field==='paidAmount' && parseFloat(val)>0 && !(row.paidDate||'').trim()){
+    toast('Enter the Paid Date first before entering a Paid Amount', true);
+    renderRentViewBody();
+    return;
+  }
+  row[field]=val;
+  if(field==='paidDate' && val.trim() && !(parseFloat(row.paidAmount)>0)){
+    // setting the date for the first time defaults Paid Amount to the full Rent — still editable for a partial payment
+    row.paidAmount = row.amount;
+  }
+  if(!saveRents(rents)) return;
+  renderRentViewBody();
+  renderRentList();
+}
+function deleteLedgerRow(idx){
+  askConfirm('Delete this ledger row? This cannot be undone.', ()=>{
+    let rents=loadRents();
+    const r=rents.find(x=>x.id===currentRentId);
+    r.ledger.splice(idx,1);
+    if(!saveRents(rents)) return;
+    renderRentViewBody();
+    renderRentList();
+  });
+}
+
+/* ===================== VACATE ===================== */
+function openVacate(rentId){
+  document.getElementById('vacateRentId').value=rentId;
+  const r=loadRents().find(x=>x.id===rentId);
+  document.getElementById('vacateDate').value=todayDMY();
+  document.getElementById('vacateAdvReturn').value=r.advanceAmount||0;
+  document.getElementById('vacateRentBal').value=currentBalance(r)||0;
+  document.getElementById('vacateMatReturn').value=0;
+  document.getElementById('vacateClaim').value=0;
+  recalcVacateNet();
+  openModalEl('vacateBg');
+}
+['vacateAdvReturn','vacateRentBal','vacateMatReturn','vacateClaim'].forEach(id=>{
+  document.addEventListener('input',(e)=>{ if(e.target.id===id) recalcVacateNet(); });
+});
+function recalcVacateNet(){
+  const adv=parseFloat(document.getElementById('vacateAdvReturn').value)||0;
+  const rentBal=parseFloat(document.getElementById('vacateRentBal').value)||0;
+  const matRet=parseFloat(document.getElementById('vacateMatReturn').value)||0;
+  const claim=parseFloat(document.getElementById('vacateClaim').value)||0;
+  const net= adv - rentBal - matRet - claim;
+  document.getElementById('vacateNet').textContent=net.toLocaleString('en-IN');
+}
+function confirmVacate(){
+  const rentId=document.getElementById('vacateRentId').value;
+  let rents=loadRents();
+  const r=rents.find(x=>x.id===rentId);
+  r.status='Vacated';
+  const vacProp=loadProps().find(x=>x.id===r.propertyId);
+  r.vacateInfo={
+    date:document.getElementById('vacateDate').value,
+    propertyNameAtVacate: vacProp?vacProp.name:null,
+    locationAtVacate: vacProp?(vacProp.location||''):'',
+    advanceReturn:document.getElementById('vacateAdvReturn').value,
+    rentBalance:document.getElementById('vacateRentBal').value,
+    materialsReturn:document.getElementById('vacateMatReturn').value,
+    claim:document.getElementById('vacateClaim').value,
+    net:document.getElementById('vacateNet').textContent,
+    handoverType:document.getElementById('vacateHandoverType').value
+  };
+  saveRents(rents);
+  closeModal('vacateBg');
+  closeModal('rentViewBg');
+  renderRentList();
+  toast('Tenant marked as Vacated');
+}
+
+/* ===================== PDF EXPORTS (professional letterhead + bordered tables) ===================== */
+function pdfHeader(doc, title){
+  doc.setFont(undefined,'bold'); doc.setFontSize(15);
+  doc.text(title||'', 105, 16, {align:'center'});
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
+  doc.text(`as on ${todayDMY()}`, 196, 16, {align:'right'});
+  doc.setDrawColor(220,220,210); doc.line(14,20,196,20);
+  doc.setTextColor(0,0,0);
+}
+function pdfFooter(doc){
+  const h=doc.internal.pageSize.getHeight();
+  doc.setDrawColor(220,220,210);
+  doc.line(14,h-14,196,h-14);
+  doc.setFontSize(8); doc.setTextColor(120,120,120);
+  doc.text('Powered by A.S.M Consultancy Service · Chidambaram', 105, h-9, {align:'center'});
+  doc.setTextColor(0,0,0);
+}
+function fitText(doc, text, maxW){
+  text = String(text);
+  if(doc.getTextWidth(text) <= maxW) return text;
+  while(text.length>1 && doc.getTextWidth(text+'…')>maxW){ text=text.slice(0,-1); }
+  return text+'…';
+}
+function pdfTable(doc, x, y, colWidths, headers, rows, pageTitle){
+  const rowH=7, fontSize=8.5;
+  const totalW=colWidths.reduce((a,b)=>a+b,0);
+  function drawHeaderRow(yy){
+    doc.setFillColor(231,239,232);
+    doc.rect(x,yy,totalW,rowH,'F');
+    doc.setFont(undefined,'bold'); doc.setFontSize(fontSize); doc.setTextColor(13,58,31);
+    let cx=x; headers.forEach((h,i)=>{doc.text(String(h),cx+2,yy+rowH-2.3);cx+=colWidths[i];});
+    doc.setFont(undefined,'normal'); doc.setTextColor(0,0,0);
+    return yy+rowH;
+  }
+  y=drawHeaderRow(y);
+  rows.forEach(row=>{
+    if(y > doc.internal.pageSize.getHeight()-26){
+      doc.addPage(); pdfHeader(doc, pageTitle); y=30; y=drawHeaderRow(y);
+    }
+    let cx=x;
+    row.forEach((cell,i)=>{ doc.text(fitText(doc,cell,colWidths[i]-3), cx+2, y+rowH-2.3); cx+=colWidths[i]; });
+    doc.setDrawColor(220,220,210);
+    doc.line(x,y+rowH,x+totalW,y+rowH);
+    y+=rowH;
+  });
+  doc.setDrawColor(200,200,190);
+  doc.rect(x, y-rows.length*rowH-rowH, totalW, rows.length*rowH+rowH);
+  return y;
+}
+function pdfLedgerTable(doc, x, y, ledger, pageTitle){
+  const colWidths=[26,24,26,26,20,26];
+  const headers=['Due Date','Rent','Paid Date','Paid Amount','Type','Balance'];
+  const totalW=colWidths.reduce((a,b)=>a+b,0);
+  const rowH=7, noteH=5, fontSize=8.5;
+  function drawHeaderRow(yy){
+    doc.setFillColor(231,239,232);
+    doc.rect(x,yy,totalW,rowH,'F');
+    doc.setFont(undefined,'bold'); doc.setFontSize(fontSize); doc.setTextColor(13,58,31);
+    let cx=x; headers.forEach((h,i)=>{doc.text(String(h),cx+2,yy+rowH-2.3);cx+=colWidths[i];});
+    doc.setFont(undefined,'normal'); doc.setTextColor(0,0,0);
+    return yy+rowH;
+  }
+  y=drawHeaderRow(y);
+  const rows = ledger.length ? ledger : [{dueDate:'No ledger entries',amount:'-',paidAmount:'-',paidDate:'-',paymentType:'-',note:''}];
+  rows.forEach(row=>{
+    const bal = row.amount==='-' ? '-' : ((parseFloat(row.amount)||0)-(parseFloat(row.paidAmount)||0)).toFixed(2);
+    const cells = row.amount==='-'
+      ? [row.dueDate,'-','-','-','-','-']
+      : [row.dueDate,'Rs.'+row.amount,row.paidDate||'-','Rs.'+(row.paidAmount||0),row.paymentType||'-','Rs.'+bal];
+    const hasNote = row.note && String(row.note).trim();
+    const needed = rowH + (hasNote?noteH:0);
+    if(y+needed > doc.internal.pageSize.getHeight()-26){
+      doc.addPage(); pdfHeader(doc, pageTitle); y=30; y=drawHeaderRow(y);
+    }
+    let cx=x;
+    cells.forEach((cell,i)=>{ doc.text(fitText(doc,cell,colWidths[i]-3), cx+2, y+rowH-2.3); cx+=colWidths[i]; });
+    doc.setDrawColor(220,220,210);
+    doc.line(x,y+rowH,x+totalW,y+rowH);
+    y+=rowH;
+    if(hasNote){
+      doc.setFontSize(7.3); doc.setTextColor(110,110,110);
+      doc.text('Note: '+row.note, x+4, y+noteH-1.5, {maxWidth:totalW-8});
+      doc.setTextColor(0,0,0); doc.setFontSize(fontSize);
+      doc.line(x,y+noteH,x+totalW,y+noteH);
+      y+=noteH;
+    }
+  });
+  doc.setDrawColor(200,200,190);
+  return y;
+}
+function buildPropertyPdf(propId){
+  const p=loadProps().find(x=>x.id===propId);
+  const main = p.linkedTo ? loadProps().find(x=>x.id===p.linkedTo) : null;
+  const portions = loadProps().filter(x=>x.linkedTo===p.id);
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Property Report';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Property Name: ${p.name}`, 14, y); y+=6;
+  doc.text(`Address: ${p.address}`, 14, y, {maxWidth:180}); y+=8;
+  if(main){ doc.setFontSize(9); doc.setTextColor(100,100,100); doc.text('Linked: Portion of '+main.name, 14, y); doc.setTextColor(0,0,0); y+=7; }
+  if(portions.length){ doc.setFontSize(9); doc.setTextColor(100,100,100); doc.text('Linked: Main property. Portion(s): '+portions.map(x=>x.name).join(', '), 14, y, {maxWidth:180}); doc.setTextColor(0,0,0); y+=7; }
+  doc.setFontSize(10.5);
+  doc.text(`EB Number: ${p.ebNumber||'-'}`, 14, y); y+=6;
+  const merged=getMergedTaxNumbers(p);
+  if(!merged.length){ doc.text('No Tax/Account Numbers added yet', 14, y); y+=6; }
+  merged.forEach(t=>{
+    doc.text(`${t.type}: ${t.number}${t.inherited?' (from Main)':''}`, 14, y); y+=6;
+  });
+  y+=4;
+
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Tax / Account Payment History', 14, y); y+=4;
+  doc.setFont(undefined,'normal');
+  const taxRows=(p.taxPayments||[]).map(t=>[t.date,t.type,t.refNo||'-','Rs.'+t.amount,t.mode,t.receipt||'-']);
+  y = pdfTable(doc, 14, y, [22,26,30,26,20,34], ['Date','Type','Ref No.','Amount','Mode','Receipt'], taxRows.length?taxRows:[['No payments recorded','-','-','-','-','-']], pageTitle);
+  y+=10;
+
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Tenant History', 14, y); y+=4;
+  doc.setFont(undefined,'normal');
+  const rents=loadRents().filter(r=>r.propertyId===propId);
+  const rentRows=rents.map(r=>[r.tenantName,r.status,'Rs.'+r.monthlyRent]);
+  pdfTable(doc, 14, y, [90,40,48], ['Tenant','Status','Monthly Rent'], rentRows.length?rentRows:[['No tenant history','-','-']], pageTitle);
+
+  pdfFooter(doc);
+  return {doc, filename:`${p.name.replace(/\s+/g,'_')}_${todayDMYFile()}.pdf`};
+}
+function openPropertyPdf(propId){
+  const {doc}=buildPropertyPdf(propId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download PDF instead.', true);
+}
+function downloadPropertyPdf(propId){
+  const {doc, filename}=buildPropertyPdf(propId);
+  doc.save(filename);
+}
+function buildSoldDetailsPdf(propId){
+  const p=loadProps().find(x=>x.id===propId);
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Sold Details';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Property Name: ${p.name}`, 14, y); y+=6;
+  doc.text(`Address: ${p.address}`, 14, y, {maxWidth:180}); y+=10;
+  const si=p.soldInfo||{};
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Sold Details', 14, y); y+=7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Buyer Name: ${si.buyerName||'-'}`, 14, y); y+=6;
+  doc.text(`Sale Amount: Rs.${si.amount||0}`, 14, y); y+=6;
+  doc.text(`Sale Date: ${si.date||'-'}`, 14, y); y+=6;
+  pdfFooter(doc);
+  return {doc, filename:`${p.name.replace(/\s+/g,'_')}_Sold_Details_${todayDMYFile()}.pdf`};
+}
+function openSoldDetailsPdf(propId){
+  const {doc}=buildSoldDetailsPdf(propId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download instead.', true);
+}
+function downloadSoldDetailsPdf(propId){
+  const {doc, filename}=buildSoldDetailsPdf(propId);
+  doc.save(filename);
+}
+function propertyPdfMenuItems(propId, mode){
+  const p=loadProps().find(x=>x.id===propId);
+  const items=[{label:'Property Details', action:`${mode==='view'?'openPropertyPdf':'downloadPropertyPdf'}('${propId}')`}];
+  if(p && p.status==='Sold'){
+    items.push({label:'Sold Details', action:`${mode==='view'?'openSoldDetailsPdf':'downloadSoldDetailsPdf'}('${propId}')`});
+  }
+  return items;
+}
+function buildRentPdf(rentId){
+  const r=loadRents().find(x=>x.id===rentId);
+  const p=loadProps().find(x=>x.id===r.propertyId);
+  const main = p && p.linkedTo ? loadProps().find(x=>x.id===p.linkedTo) : null;
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Tenant Report';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Tenant Name: ${r.tenantName}`, 14, y); y+=6;
+  doc.text(`Property Address: ${p?p.name+' - '+p.address:'(property removed)'}`, 14, y, {maxWidth:180}); y+=7;
+  if(main){ doc.setFontSize(9); doc.setTextColor(100,100,100); doc.text('Linked: Portion of '+main.name, 14, y); doc.setTextColor(0,0,0); doc.setFontSize(10.5); y+=7; }
+  doc.text(`Mobile: ${r.mobile1}${r.mobile2?(' / '+r.mobile2):''}`,14,y);
+  doc.text(`Status: ${r.status}`,105,y); y+=6;
+  doc.text(`Monthly Rent: Rs.${r.monthlyRent}`,14,y);
+  doc.text(`EB Number: ${p?p.ebNumber||'-':'-'}`,105,y); y+=6;
+  doc.text(`Advance: Rs.${r.advanceAmount||0} on ${r.advanceDate||'-'} (${r.advanceType||'-'})${r.advanceNote?' - '+r.advanceNote:''}`,14,y,{maxWidth:180}); y+=8;
+  const st=getTenantStatus(r);
+  const stColors={advance:[20,83,45], nodue:[20,83,45], due:[168,104,30], overdue:[140,47,47]};
+  const c=stColors[st.status]||[0,0,0];
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.setTextColor(c[0],c[1],c[2]);
+  doc.text(`Account Balance: ${st.label.replace('₹','Rs.')}`, 14, y);
+  doc.setTextColor(0,0,0); doc.setFont(undefined,'normal'); doc.setFontSize(10); y+=9;
+
+  const mats=(r.materialsGiven||[]).map(m=>`${m.name} x${m.qty}`).join(', ') || 'None';
+  doc.setFont(undefined,'bold'); doc.setFontSize(10.5); doc.text('Materials Given:', 14, y);
+  doc.setFont(undefined,'normal'); doc.text(mats, 44, y, {maxWidth:150}); y+=9;
+
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Monthly Rent History', 14, y); y+=4;
+  doc.setFont(undefined,'normal');
+  y = pdfLedgerTable(doc, 14, y, r.ledger||[], pageTitle);
+
+  pdfFooter(doc);
+  return {doc, filename:`${r.tenantName.replace(/\s+/g,'_')}_${todayDMYFile()}.pdf`};
+}
+function openRentPdf(rentId){
+  const {doc}=buildRentPdf(rentId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download PDF instead.', true);
+}
+function downloadRentPdf(rentId){
+  const {doc, filename}=buildRentPdf(rentId);
+  doc.save(filename);
+}
+function buildVacateDetailsPdf(rentId){
+  const r=loadRents().find(x=>x.id===rentId);
+  const p=loadProps().find(x=>x.id===r.propertyId);
+  const propName=(r.vacateInfo&&r.vacateInfo.propertyNameAtVacate) || (p?p.name:'(property removed)');
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Vacate Details';
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Tenant Name: ${r.tenantName}`, 14, y); y+=6;
+  doc.text(`Property: ${propName}`, 14, y, {maxWidth:180}); y+=6;
+  doc.text(`Mobile: ${r.mobile1}${r.mobile2?(' / '+r.mobile2):''}`, 14, y); y+=10;
+  const vi=r.vacateInfo||{};
+  doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.text('Vacate Settlement', 14, y); y+=7;
+  doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
+  doc.text(`Vacate Date: ${vi.date||'-'}`, 14, y); y+=6;
+  doc.text(`Advance Returned: Rs.${vi.advanceReturn||0}`, 14, y); y+=6;
+  doc.text(`Rent Balance Deducted: Rs.${vi.rentBalance||0}`, 14, y); y+=6;
+  doc.text(`Materials Return Value: Rs.${vi.materialsReturn||0}`, 14, y); y+=6;
+  doc.text(`Other Claim / Damage: Rs.${vi.claim||0}`, 14, y); y+=6;
+  doc.text(`Handover Payment Type: ${vi.handoverType||'-'}`, 14, y); y+=8;
+  doc.setFont(undefined,'bold'); doc.setFontSize(11.5);
+  doc.text(`Net Amount Handed Over: Rs.${vi.net||0}`, 14, y); y+=10;
+  pdfFooter(doc);
+  return {doc, filename:`${r.tenantName.replace(/\s+/g,'_')}_Vacate_Details_${todayDMYFile()}.pdf`};
+}
+function openVacateDetailsPdf(rentId){
+  const {doc}=buildVacateDetailsPdf(rentId);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try Download instead.', true);
+}
+function downloadVacateDetailsPdf(rentId){
+  const {doc, filename}=buildVacateDetailsPdf(rentId);
+  doc.save(filename);
+}
+function rentPdfMenuItems(rentId, mode){
+  const r=loadRents().find(x=>x.id===rentId);
+  const items=[{label:'Tenant Info', action:`${mode==='view'?'openRentPdf':'downloadRentPdf'}('${rentId}')`}];
+  if(r && r.status==='Vacated'){
+    items.push({label:'Vacate Details', action:`${mode==='view'?'openVacateDetailsPdf':'downloadVacateDetailsPdf'}('${rentId}')`});
+  }
+  return items;
+}
+/* ===================== CONSOLIDATED (all-Active) PDFs — triggered from the tab's own View/PDF button ===================== */
+function buildConsolidatedRentPdf(scopeIds, scopeLabel){
+  const props=loadProps();
+  let rents=loadRents().filter(r=>r.status==='Active');
+  if(scopeIds) rents=rents.filter(r=>scopeIds.includes(r.propertyId));
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Tenant Reports'+(scopeLabel?` — ${scopeLabel}`:'');
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  const rows=rents.map(r=>{
+    const p=props.find(x=>x.id===r.propertyId);
+    const st=getTenantStatus(r);
+    return [r.tenantName, p?p.name:'-', 'Rs.'+(r.advanceAmount||0), r.mobile1, 'Rs.'+r.monthlyRent, st.label.replace('₹','Rs.')];
+  });
+  y = pdfTable(doc, 14, y, [30,42,26,24,22,38], ['Tenant','Property','Advance','Mobile','Rent','Balance'], rows.length?rows:[['No active tenants','-','-','-','-','-']], pageTitle);
+  pdfFooter(doc);
+  return {doc, filename:`Tenant_Reports_${todayDMYFile()}.pdf`};
+}
+function buildConsolidatedPropertyPdf(scopeIds, scopeLabel){
+  // scopeIds is null for All, otherwise it contains the exact property IDs
+  // selected by By Location or By Property.
+  let props=loadProps()
+    .filter(p=>p.status!=='Sold')
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  if(Array.isArray(scopeIds)) props=props.filter(p=>scopeIds.includes(p.id));
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Property Reports'+(scopeLabel?` — ${scopeLabel}`:'');
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  const rows=[];
+  props.forEach((p,pIdx)=>{
+    const merged=getMergedTaxNumbers(p);
+    if(!merged.length){
+      rows.push([p.name, '-', '-', '-', '-']);
+    } else {
+      merged.forEach((t,i)=>{
+        const lastPay=getLastPaymentForType(t.source, t.type);
+        rows.push([
+          i===0?p.name:'',
+          t.type + (t.inherited?' (from Main)':''),
+          t.number||'-',
+          lastPay?lastPay.date:'-',
+          lastPay?'Rs.'+lastPay.amount:'-'
+        ]);
+      });
+    }
+    if(pIdx < props.length-1) rows.push(['','','','','']); // blank line between properties
+  });
+  y = pdfTable(doc, 14, y, [46,34,26,30,30], ['Property','Type','Number','Last Paid Date','Amount'], rows.length?rows:[['No properties in this scope','-','-','-','-']], pageTitle);
+  pdfFooter(doc);
+  return {doc, filename:`Property_Reports_${todayDMYFile()}.pdf`};
+}
+
+/* ===================== REPORT SCOPE PICKER (shared by both toolbar View/PDF buttons) ===================== */
+let reportScopeTarget='rent';
+function openReportScope(target){
+  reportScopeTarget=target;
+  document.getElementById('reportScopeTitle').textContent = target==='rent' ? 'Tenant Report Scope' : 'Property Report Scope';
+  document.getElementById('reportScopeVacateHistoryBtn').style.display = target==='property' ? '' : 'none';
+  document.getElementById('reportScopeMode').value='all';
+  document.getElementById('reportScopeLocationSearch').value='';
+  document.getElementById('reportScopeLocationVal').value='';
+  document.getElementById('reportScopePropSearch').value='';
+  document.getElementById('reportScopePropVal').value='';
+  toggleReportScopeMode();
+  openModalEl('reportScopeBg');
+}
+function toggleReportScopeMode(){
+  const m=document.getElementById('reportScopeMode').value;
+  document.getElementById('reportScopeLocationWrap').style.display = m==='location'?'block':'none';
+  document.getElementById('reportScopePropertyWrap').style.display = m==='property'?'block':'none';
+}
+function filterReportScopeProps(){
+  const q=document.getElementById('reportScopePropSearch').value.toLowerCase();
+  const props=loadProps().filter(p=>p.name.toLowerCase().includes(q));
+  const box=document.getElementById('reportScopePropOpts');
+  box.innerHTML = props.map(p=>`<div class="opt" onclick="selectReportScopeProp('${p.id}')">${esc(p.name)}</div>`).join('') || '<div class="opt sub">No match</div>';
+  box.classList.add('show');
+}
+function selectReportScopeProp(id){
+  const pr=loadProps().find(x=>x.id===id);
+  document.getElementById('reportScopePropVal').value=id;
+  document.getElementById('reportScopePropSearch').value=pr?pr.name:'';
+  document.getElementById('reportScopePropOpts').classList.remove('show');
+}
+function buildVacatedHistoryPdf(scopeIds=null, scopeLabel=null){
+  const props=loadProps();
+  let rents=loadRents().filter(r=>r.status==='Vacated');
+  if(Array.isArray(scopeIds)) rents=rents.filter(r=>scopeIds.includes(r.propertyId));
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Vacated Tenant History'+(scopeLabel?` — ${scopeLabel}`:'');
+  pdfHeader(doc, pageTitle);
+  let y=30;
+  const rows=rents.map(r=>{
+    const p=props.find(x=>x.id===r.propertyId);
+    const propName=(r.vacateInfo&&r.vacateInfo.propertyNameAtVacate) || (p?p.name:'(property removed)');
+    const fromDate=(r.ledger&&r.ledger.length)?r.ledger[0].dueDate:'-';
+    const toDate=r.vacateInfo?.date||'-';
+    const idProof=`${r.idProofType||''} ${r.idProofNo||''}`.trim()||'-';
+    const advReturned=r.vacateInfo?.advanceReturn!=null ? 'Rs.'+r.vacateInfo.advanceReturn : '-';
+    const net=r.vacateInfo?.net!=null ? 'Rs.'+r.vacateInfo.net : '-';
+    return [r.tenantName, propName, `${fromDate} to ${toDate}`, r.mobile1, idProof, advReturned, net];
+  });
+  y = pdfTable(doc, 14, y, [26,30,38,24,26,20,22], ['Tenant','Property','Duration','Mobile','ID Proof','Adv. Returned','Net Settlement'], rows.length?rows:[['No vacated tenants in this scope','-','-','-','-','-','-']], pageTitle);
+  pdfFooter(doc);
+  return {doc, filename:`Vacated_Tenant_History${scopeLabel?'_'+scopeLabel.replace(/[^a-z0-9]+/gi,'_'):''}_${todayDMYFile()}.pdf`};
+}
+function generateScopedVacateHistory(){
+  if(reportScopeTarget!=='property') return;
+  const mode=document.getElementById('reportScopeMode').value;
+  let scopeIds=null, scopeLabel=null;
+  const props=loadProps();
+  if(mode==='all'){
+    scopeIds=null;
+  } else if(mode==='location'){
+    const loc=document.getElementById('reportScopeLocationVal').value.trim()
+             || document.getElementById('reportScopeLocationSearch').value.trim();
+    if(!loc){toast('Select a location');return;}
+    scopeIds=props
+      .filter(p=>(p.location||'').trim().toLowerCase()===loc.toLowerCase())
+      .map(p=>p.id);
+    scopeLabel=loc;
+  } else if(mode==='property'){
+    let pid=document.getElementById('reportScopePropVal').value.trim();
+    if(!pid){
+      const typed=document.getElementById('reportScopePropSearch').value.trim();
+      if(typed){
+        const match=props.find(x=>x.name.trim().toLowerCase()===typed.toLowerCase());
+        if(match) pid=match.id;
+      }
+    }
+    if(!pid){toast('Select a property');return;}
+    const prop=props.find(x=>x.id===pid);
+    if(!prop){toast('Property not found');return;}
+    scopeIds=[prop.id];
+    scopeLabel=prop.name;
+  } else {
+    toast('Select All, Location or Property for Vacate History');
+    return;
+  }
+  closeModal('reportScopeBg');
+  const {doc}=buildVacatedHistoryPdf(scopeIds, scopeLabel);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try again.', true);
+}
+function generateScopedReport(){
+  const mode=document.getElementById('reportScopeMode').value;
+  let scopeIds=null, scopeLabel=null;
+  if(mode==='location'){
+    // Use the selected hidden value first. This prevents a partially typed
+    // location from being treated as a valid selection.
+    const loc=document.getElementById('reportScopeLocationVal').value.trim()
+             || document.getElementById('reportScopeLocationSearch').value.trim();
+    if(!loc){toast('Select a location');return;}
+    const allProps=loadProps();
+    scopeIds=allProps
+      .filter(p=>(p.location||'').trim().toLowerCase()===loc.toLowerCase())
+      .map(p=>p.id);
+    scopeLabel=loc;
+  } else if(mode==='property'){
+    let pid=document.getElementById('reportScopePropVal').value.trim();
+    const props=loadProps();
+    // If the user typed an exact property name, resolve it automatically.
+    // Do not broaden the result to linked/main/portion properties.
+    if(!pid){
+      const typed=document.getElementById('reportScopePropSearch').value.trim();
+      if(typed){
+        const match=props.find(x=>x.name.trim().toLowerCase()===typed.toLowerCase());
+        if(match) pid=match.id;
+      }
+    }
+    if(!pid){toast('Select a property');return;}
+    const p=props.find(x=>x.id===pid);
+    if(!p){toast('Property not found');return;}
+    scopeIds=[p.id];
+    scopeLabel=p.name;
+  }
+  closeModal('reportScopeBg');
+  const {doc} = reportScopeTarget==='rent'
+    ? buildConsolidatedRentPdf(scopeIds, scopeLabel)
+    : buildConsolidatedPropertyPdf(scopeIds, scopeLabel);
+  const url=doc.output('bloburl');
+  const w=window.open(url,'_blank');
+  if(!w) toast('Could not open PDF viewer — try again.', true);
+}
+
+/* ===================== BACKUP / RESTORE ===================== */
+function doBackup(){
+  const data={properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes(), exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`ASM_RentManager_Backup_${todayDMYFile()}.json`;
+  a.click();
+  toast('Backup downloaded');
+}
+function doRestore(){
+  const f=document.getElementById('restoreFile').files[0];
+  if(!f){toast('Choose a backup file first');return;}
+  askConfirm('Restoring will REPLACE all current Property and Rent data with the backup file. Continue?', ()=>{
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const data=JSON.parse(e.target.result);
+        if(!Array.isArray(data.properties) || !Array.isArray(data.rents)){ toast('Invalid backup file', true); return; }
+        if(!saveProps(data.properties)) return;
+        if(!saveRents(data.rents)) return;
+        // pickers: restore saved lists, and always include any location already used by a property
+        const locs=Array.isArray(data.locations)?data.locations.slice():[];
+        data.properties.forEach(p=>{ if(p.location && !locs.some(l=>l.toLowerCase()===p.location.toLowerCase())) locs.push(p.location); });
+        saveLocations(locs);
+        if(Array.isArray(data.taxTypes) && data.taxTypes.length) saveTaxTypes(data.taxTypes);
+        renderPropList(); renderRentList();
+        toast('Data restored successfully');
+      }catch(err){ toast('Invalid backup file', true); }
+    };
+    reader.readAsText(f);
+  }, 'Restore', 'Confirm Restore');
+}
+function doReset(){
+  askConfirm('This erases EVERY Property and Rent record on this device. Take a backup first. Continue?', ()=>{
+    saveProps([]); saveRents([]);
+    renderPropList(); renderRentList();
+    toast('All data has been reset');
+  }, 'Reset All', 'Confirm Reset');
+}
+
+/* ===================== INIT ===================== */
+renderRentList();
+renderPropList();
+</script>
+</body>
+</html>
