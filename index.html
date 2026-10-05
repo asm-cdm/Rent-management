@@ -5,21 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ASM Rent Manager</title>
 
-  <!-- Inline Favicon (Prevents general/missing icon issues) -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2314532D'/><text x='50%' y='65%' font-size='50' font-weight='bold' text-anchor='middle' fill='%23FFFFFF'>R</text></svg>">
+  <!-- Inline SVG Favicon (A.S.M Consultancy Services Logo) -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><rect width='500' height='500' fill='%230A1140'/><circle cx='250' cy='250' r='210' fill='none' stroke='%23D4AF37' stroke-width='10'/><text x='250' y='250' font-family='Arial, sans-serif' font-size='110' font-weight='bold' text-anchor='middle' fill='%23FFFFFF'>A.S.M</text><text x='250' y='295' font-family='Arial, sans-serif' font-size='32' font-weight='600' text-anchor='middle' fill='%23FFFFFF'>Consultancy Services</text><text x='250' y='330' font-family='Arial, sans-serif' font-size='20' text-anchor='middle' fill='%23FFFFFF'>Business %26 System Digitisation</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'><rect width='500' height='500' fill='%230A1140'/><circle cx='250' cy='250' r='210' fill='none' stroke='%23D4AF37' stroke-width='10'/><text x='250' y='250' font-family='Arial, sans-serif' font-size='110' font-weight='bold' text-anchor='middle' fill='%23FFFFFF'>A.S.M</text><text x='250' y='295' font-family='Arial, sans-serif' font-size='32' font-weight='600' text-anchor='middle' fill='%23FFFFFF'>Consultancy Services</text><text x='250' y='330' font-family='Arial, sans-serif' font-size='20' text-anchor='middle' fill='%23FFFFFF'>Business %26 System Digitisation</text></svg>">
 
-  <!-- Embedded Web App Manifest to resolve PWA installation collisions -->
-  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIkFTTSBSZW50IE1hbmFnZXIiLAogICJzaG9ydF9uYW1lIjogIlJlbnRNYW5hZ2VyIiwKICAic3RhcnRfdXJsIjogIi4vIiwKICAiaWQiOiAiL2FzbS1yZW50LW1hbmFnZXItdjEiLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiNGNkY1RTEiLAogICJ0aGVtZV9jb2xvciI6ICIjMEQzQTFGIgogfQ==">
+  <!-- Manifest with Data Protection & Unique Scope ID -->
+  <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIkFTTSBSZW50IE1hbmFnZXIiLAogICJzaG9ydF9uYW1lIjogIlJlbnRNYW5hZ2VyIiwKICAic3RhcnRfdXJsIjogIi4vIiwKICAiaWQiOiAiL2FzbS1yZW50LW1hbmFnZXItdjIiLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwQTExNDAiLAogICJ0aGVtZV9jb2xvciI6ICIjMEExMTQwIiwKICAiaWNvbnMiOiBbCiAgICB7CiAgICAgICJzcmMiOiAiZGF0YTppbWFnZS9zdmcreG1sO3V0ZjgsPHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA1MDAgNTAwJz48cmVjdCB3aWR0aD0nNTAwJyBoZWlnaHQ9JzUwMCcgZmlsbD0nJTIzMEExMTQwJy8+PGNpcmNsZSBjeD0nMjUwJyBjeT0nMjUwJyByPScyMTAnIGZpbGw9J25vbmUnIHN0cm9rZT0nJTIzRDRBRjM3JyBzdHJva2Utd2lkdGg9JzEwJy8+PHRleHQgeD0nMjUwJyB5PScyNTAnIGZvbnQtZmFtaWx5PSdBcmlhbCwgc2Fucy1zZXJpZicgZm9udC1zaXplPScxMTAnIGZvbnQtd2VpZ2h0PSdib2xkJyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmaWxsPSclMjNGRkZGRkYnPkEuUy5NPC90ZXh0Pjx0ZXh0IHg9JzI1MCcgeT0nMjk1JyBmb250LWZhbWlseT0nQXJpYWwsIHNhbnMtc2VyaWYnIGZvbnQtc2l6ZT0nMzInIGZvbnQtd2VpZ2h0PSc2MDAnIHRleHQtYW5jaG9yPSdtaWRkbGUnIGZpbGw9JyUyM0ZGRkZGRic+Q29uc3VsdGFuY3kgU2VydmljZXM8L3RleHQ+PHRleHQgeD0nMjUwJyB5PSczMzAnIGZvbnQtZmFtaWx5PSdBcmlhbCwgc2Fucy1zZXJpZicgZm9udC1zaXplPScyMCcgdGV4dC1hbmNob3I9J21pZGRsZScgZmlsbD0nJTIzRkZGRkZGJz5CdXNpbmVzcyAlMjYgU3lzdGVtIERpZ2l0aXNhdGlvbjwvdGV4dD48L3N2Zz4iLAogICAgICAic2l6ZXMiOiAiNTEyeDUxMiIsCiAgICAgICJ0eXBlIjogImltYWdlL3N2Zyt4bWwiLAogICAgICAicHVycG9zZSI6ICJhbnkgbWFza2FibGUiCiAgICB9CiAgXQp9">
 
-  <!-- External JS Library for PDF Generation -->
+  <!-- External PDF Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   
   <script>
-    // Request persistent storage so the browser does not auto-clear saved data
+    // Browser Data Clearing Protection & Storage Persistence
     if (navigator.storage && navigator.storage.persist) {
       navigator.storage.persist().then(function(granted) {
         if (granted) {
-          console.log("Storage is persistent.");
+          console.log("Storage is persistent - Protected from browser auto-clear.");
         }
       });
     }
@@ -28,19 +29,20 @@
   <style>
     :root {
       --bg:#F6F5F1; --panel:#FFFFFF; --ink:#1C1F1B; --sub:#5C645C;
-      --line:#DDD9CE; --brand:#14532D; --brand-dk:#0D3A1F; --brand-lt:#E7EFE8;
+      --line:#DDD9CE; --brand:#0A1140; --brand-dk:#060A28; --brand-lt:#E7EAFA;
+      --gold:#D4AF37;
       --amber:#A8681E; --amber-lt:#F5EAD9;
       --red:#8C2F2F; --red-lt:#F6E7E7;
       --radius:10px;
     }
     * { box-sizing:border-box; }
     body { margin:0; font-family:'Segoe UI',Tahoma,Arial,sans-serif; background:var(--bg); color:var(--ink); font-size:15px; }
-    header { background:var(--brand-dk); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    header { background:var(--brand); color:#fff; padding:14px 20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-bottom:2px solid var(--gold); }
     header h1 { margin:0; font-size:19px; font-weight:600; letter-spacing:.2px; }
-    header .tag { font-size:12px; color:#BFD8C6; }
+    header .tag { font-size:12px; color:var(--gold); }
     nav.tabs { display:flex; gap:6px; background:var(--panel); border-bottom:1px solid var(--line); padding:0 16px; overflow-x:auto; }
     nav.tabs button { background:none; border:none; padding:13px 16px; font-size:14.5px; font-weight:600; color:var(--sub); cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap; }
-    nav.tabs button.active { color:var(--brand-dk); border-bottom-color:var(--brand); }
+    nav.tabs button.active { color:var(--brand); border-bottom-color:var(--gold); }
     main { padding:16px; max-width:1100px; margin:0 auto; }
     .section { display:none; }
     .section.active { display:block; }
@@ -48,10 +50,8 @@
     .toolbar input[type=text] { flex:1; min-width:180px; padding:9px 12px; border:1px solid var(--line); border-radius:var(--radius); font-size:14.5px; }
     .btn { padding:9px 16px; border-radius:var(--radius); border:1px solid var(--brand); background:var(--brand); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
     .btn:hover { background:var(--brand-dk); }
-    .btn.secondary { background:#fff; color:var(--brand-dk); border-color:var(--line); }
+    .btn.secondary { background:#fff; color:var(--brand); border-color:var(--line); }
     .btn.secondary:hover { background:var(--brand-lt); }
-    .btn.danger { background:#fff; color:var(--red); border-color:var(--red-lt); }
-    .btn.danger:hover { background:var(--red-lt); }
     .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; }
     .summary-strip { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
     .summary-strip .s { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 14px; font-size:12.5px; color:var(--sub); }
@@ -64,7 +64,7 @@
   <header>
     <div>
       <h1>ASM Rent Manager</h1>
-      <div class="tag">Powered by A.S.M Consultancy Service · Chidambaram</div>
+      <div class="tag">Powered by A.S.M Consultancy Services · Chidambaram</div>
     </div>
   </header>
 
@@ -118,7 +118,7 @@
   </main>
 
   <footer>
-    Powered by A.S.M Consultancy Service · Chidambaram
+    Powered by A.S.M Consultancy Services · Chidambaram
   </footer>
 
   <script>
