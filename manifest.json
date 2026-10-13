@@ -1,14 +1,24 @@
 {
   "name": "A S M Rent Manager",
   "short_name": "Rent Manager",
-  "id": "./",
-  "start_url": "./",
-  "scope": "./",
+  "id": "https://asm-cdm.github.io/rent-manager/",
+  "start_url": "https://asm-cdm.github.io/rent-manager/",
+  "scope": "https://asm-cdm.github.io/rent-manager/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#14532D",
   "icons": [
-    { "src": "asm-favicon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "asm-favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    {
+      "src": "https://asm-cdm.github.io/rent-manager/asm-favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "https://asm-cdm.github.io/rent-manager/asm-favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
   ]
 }
