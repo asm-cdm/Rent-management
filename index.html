@@ -235,6 +235,24 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
   </div>
 </div></div>
 
+<!-- ============ MESSAGE POPUP (Google Drive messages, stays until OK) ============ -->
+<div class="modal-bg" id="driveMsgBg" style="z-index:95"><div class="modal" style="max-width:380px">
+  <h2 id="driveMsgTitle"></h2>
+  <p class="sub" id="driveMsgText"></p>
+  <div class="modal-actions"><button class="btn" onclick="closeModal('driveMsgBg')">OK</button></div>
+</div></div>
+
+<!-- ============ FIRST-RUN SCREEN (only when this device has no data) ============ -->
+<div class="modal-bg" id="firstRunBg" style="z-index:92"><div class="modal" style="max-width:400px">
+  <h2>No data found on this device</h2>
+  <p class="sub">If you used Rent Manager before, on this phone or another one, restore your data now. If you are new, start fresh.</p>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+    <button class="btn" onclick="firstRunRestoreDrive()">Restore from Google Drive</button>
+    <button class="btn secondary" onclick="firstRunRestoreFile()">Restore from a backup file</button>
+    <button class="btn secondary" onclick="firstRunStartFresh()">Start fresh</button>
+  </div>
+</div></div>
+
 <!-- ============ REPORT SCOPE MODAL (used by both View/PDF toolbar buttons) ============ -->
 <div class="modal-bg" id="reportScopeBg" style="align-items:center"><div class="modal" style="max-width:360px">
   <h2 id="reportScopeTitle">Report Scope</h2>
@@ -2040,6 +2058,13 @@ const DRIVE_GOOGLE_SCOPE='https://www.googleapis.com/auth/drive.file';
 const DRIVE_GOOGLE_FOLDER='ASM Backups';
 let driveBusy=false, driveGToken=null, driveGExpiry=0, driveGClient=null, driveGWaiter=null, driveGFolderId=null;
 
+/* ---- message popup (stays on screen until OK) ---- */
+function driveShowMessage(title,msg,icon){
+  document.getElementById('driveMsgTitle').textContent=(icon||'ℹ️')+' '+title;
+  document.getElementById('driveMsgText').textContent=msg;
+  openModalEl('driveMsgBg');
+}
+
 /* ---- small storage helpers ---- */
 function driveRead(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
 function driveWrite(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
@@ -2152,13 +2177,13 @@ function driveErrText(e){
 }
 
 /* ---- sign in / out ---- */
-async function driveGoogleSignIn(){
+async function driveGoogleSignIn(quiet){
   try{ await driveGoogleToken(); }
-  catch(e){ toast((e && e.message)?e.message:'Sign-in failed.', true); return; }
+  catch(e){ driveShowMessage('Google sign-in',(e && e.message)?e.message:'Sign-in failed.','⚠️'); return; }
   if(!driveIsConnected()){ driveWrite(DRIVE_STORE.auto,'0'); driveWrite(DRIVE_STORE.last,'0'); }
   driveWrite(DRIVE_STORE.gflag,'1');
   driveRenderStatus('');
-  toast('Signed in. Press Backup to Google Drive to save your first backup.');
+  if(quiet!==true) driveShowMessage('Google sign-in','Signed in. Press Backup to Google Drive to save your first backup.','✅');
 }
 function driveGoogleDisconnect(){
   try{
@@ -2175,8 +2200,8 @@ function driveGoogleDisconnect(){
 async function driveTestConnection(){
   const btn=document.getElementById('driveTestBtn');
   if(btn){ btn.disabled=true; btn.textContent='Testing...'; }
-  try{ await driveGoogleToken(); driveRenderStatus(''); toast('Connected. Your Google Drive is ready.'); }
-  catch(e){ toast(driveErrText(e), true); }
+  try{ await driveGoogleToken(); driveRenderStatus(''); driveShowMessage('Drive Test','Connected ✔ Your Google Drive is ready.','✅'); }
+  catch(e){ driveShowMessage('Drive Test failed',driveErrText(e),'⚠️'); }
   if(btn){ btn.disabled=false; btn.textContent='Test Connection'; }
 }
 
@@ -2191,10 +2216,10 @@ function driveSetBusyUI(busy){
 }
 async function driveBackupNow(){
   if(driveBusy) return;
-  if(!driveIsConnected()){ toast('Sign in with Google first.', true); return; }
+  if(!driveIsConnected()){ driveShowMessage('Drive Backup','Sign in with Google first.','⚠️'); return; }
   // Never replace the Drive file with empty data (e.g. new phone / cleared memory)
   if(loadProps().length===0 && loadRents().length===0){
-    toast('No data to back up. If this is a new phone, restore your data first.', true); return;
+    driveShowMessage('Drive Backup','No data to back up. If this is a new phone, restore your data first so the Drive file is not replaced with an empty one.','⚠️'); return;
   }
   driveBusy=true; driveSetBusyUI(true);
   const year=new Date().getFullYear();
@@ -2208,10 +2233,10 @@ async function driveBackupNow(){
   if(!fail){
     driveWrite(DRIVE_STORE.last,String(Date.now())); driveWrite(DRIVE_STORE.auto,'1');
     driveRenderStatus('');
-    toast('Backup saved to Google Drive ('+name+')');
+    driveShowMessage('Drive Backup','Backup saved to Google Drive.','✅');
   } else {
     driveRenderStatus('Backup failed: '+fail);
-    toast('Backup failed: '+fail, true);
+    driveShowMessage('Drive Backup failed',fail,'⚠️');
   }
 }
 
@@ -2235,7 +2260,7 @@ async function driveLoadList(){
     else{
       box.innerHTML=files.map(f=>`<div class="card" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><div class="name" style="font-size:14px">${esc(f.name)}</div><div class="sub">Saved ${esc(driveFormatTime(Date.parse(f.modifiedTime)))}</div></div><button class="btn small" onclick="driveRestoreFile(${jsq(f.id)},${jsq(f.name)})">Restore</button></div>`).join('');
     }
-  }catch(e){ toast(driveErrText(e), true); }
+  }catch(e){ driveShowMessage('Google Drive',driveErrText(e),'⚠️'); }
   if(btn){ btn.disabled=false; btn.textContent='Restore from Google Drive'; }
 }
 function driveRestoreFile(fileId,name){
@@ -2244,11 +2269,11 @@ function driveRestoreFile(fileId,name){
       const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media');
       const data=JSON.parse(await r.text());
       driveApplyRestore(data);
-    }catch(e){ toast((e && e.name==='SyntaxError')?'Invalid backup file':driveErrText(e), true); }
+    }catch(e){ driveShowMessage('Restore',(e && e.name==='SyntaxError')?'Invalid backup file.':driveErrText(e),'⚠️'); }
   }, 'Restore', 'Confirm Restore');
 }
 function driveApplyRestore(data){
-  if(!data || !Array.isArray(data.properties) || !Array.isArray(data.rents)){ toast('Invalid backup file', true); return; }
+  if(!data || !Array.isArray(data.properties) || !Array.isArray(data.rents)){ driveShowMessage('Restore','Invalid backup file.','⚠️'); return; }
   if(!saveProps(data.properties)) return;
   if(!saveRents(data.rents)) return;
   const locs=Array.isArray(data.locations)?data.locations.slice():[];
@@ -2256,7 +2281,7 @@ function driveApplyRestore(data){
   saveLocations(locs);
   if(Array.isArray(data.taxTypes) && data.taxTypes.length) saveTaxTypes(data.taxTypes);
   renderPropList(); renderRentList();
-  toast('Data restored successfully from Google Drive');
+  driveShowMessage('Restore','Data restored successfully.','✅');
 }
 
 /* ---- daily reminder (message only - never saves by itself) ---- */
@@ -2307,10 +2332,40 @@ function driveInit(){
 }
 /* ===================== END GOOGLE DRIVE BACKUP MODULE ===================== */
 
+/* ===================== FIRST-RUN SCREEN MODULE (isolated) =====================
+   Shows once when this device has no data, so a new phone is not started empty by mistake. */
+const FIRSTRUN_KEY='asm_rm2_firstrun_done';
+function firstRunHasData(){ return loadProps().length>0 || loadRents().length>0; }
+function firstRunMarkDone(){ try{ localStorage.setItem(FIRSTRUN_KEY,'1'); }catch(e){} }
+function firstRunGoBackupTab(){ const b=document.querySelector('.tab-btn[data-tab="backup"]'); if(b) b.click(); }
+function firstRunCheck(){
+  if(firstRunHasData()){ firstRunMarkDone(); return; }
+  let done=''; try{ done=localStorage.getItem(FIRSTRUN_KEY)||''; }catch(e){}
+  if(done==='1') return;
+  openModalEl('firstRunBg');
+}
+async function firstRunRestoreDrive(){
+  closeModal('firstRunBg');
+  firstRunGoBackupTab();
+  if(!driveIsConnected()) await driveGoogleSignIn(true);
+  if(driveIsConnected()) driveLoadList();
+}
+function firstRunRestoreFile(){
+  closeModal('firstRunBg');
+  firstRunGoBackupTab();
+  toast('Choose your backup file below and press Restore from File.');
+}
+function firstRunStartFresh(){
+  firstRunMarkDone();
+  closeModal('firstRunBg');
+}
+/* ===================== END FIRST-RUN SCREEN MODULE ===================== */
+
 /* ===================== INIT ===================== */
 renderRentList();
 renderPropList();
 driveInit();
+firstRunCheck();
 </script>
 </body>
 </html>
