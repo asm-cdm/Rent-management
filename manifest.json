@@ -1,12 +1,12 @@
 {
   "name": "A S M Rent Manager",
   "short_name": "Rent Manager",
-  "id": "https://asm-cdm.github.io/rent-manager/",
-  "start_url": "https://asm-cdm.github.io/rent-manager/",
-  "scope": "https://asm-cdm.github.io/rent-manager/",
+  "id": "/rent-manager/",
+  "start_url": "/rent-manager/",
+  "scope": "/rent-manager/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#14532D",
+  "theme_color": "#1a3d8f",
   "icons": [
     {
       "src": "https://asm-cdm.github.io/rent-manager/asm-favicon.png",
