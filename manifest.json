@@ -1,9 +1,9 @@
 {
   "name": "A S M Rent Manager",
   "short_name": "Rent Manager",
-  "id": "/rent-manager/",
-  "start_url": "/rent-manager/",
-  "scope": "/rent-manager/",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#14532D",
