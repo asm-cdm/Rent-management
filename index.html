@@ -8,6 +8,7 @@
 <link rel="apple-touch-icon" href="https://asm-cdm.github.io/Rent-management/asm-favicon.png?v=2">
 <link rel="manifest" href="https://asm-cdm.github.io/Rent-management/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 // Request persistent storage so the browser does not
 // auto-clear this app's saved data when device storage runs low
@@ -149,6 +150,8 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
 
 <main>
 
+  <div id="driveBanner" style="display:none"></div>
+
   <!-- ============ RENT SECTION ============ -->
   <section id="sec-rent" class="section active">
     <div class="summary-strip" id="rentSummaryStrip"></div>
@@ -182,6 +185,32 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
       <p class="sub" style="margin-top:-4px">Restore from a previously downloaded backup file. This replaces current data.</p>
       <input type="file" id="restoreFile" accept=".json" style="margin-bottom:8px">
       <br><button class="btn secondary" onclick="doRestore()">Restore from File</button>
+    </div>
+    <div class="card" id="driveBox">
+      <h3 style="margin-top:0">Google Drive Backup</h3>
+      <div id="driveQuietRow" style="display:none">
+        <p class="sub" style="margin-top:-4px">Optional: save a backup copy of your data to your own Google Drive. Open this app in Chrome (not inside WhatsApp) to sign in.</p>
+        <button class="btn" onclick="driveGoogleSignIn()">Sign in with Google</button>
+        <p class="sub" style="margin-top:8px"><a href="https://asm-cdm.github.io/asm-privacy/" target="_blank" rel="noopener">Privacy policy</a></p>
+      </div>
+      <div id="driveMain" style="display:none">
+        <p id="driveStatusLine" class="sub" style="margin-top:-4px;font-weight:600"></p>
+        <p id="driveLastLine" class="sub"></p>
+        <p id="driveAutoLine" class="sub" style="font-size:12px"></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn" id="driveBackupBtn" onclick="driveBackupNow()">Backup to Google Drive</button>
+          <button class="btn secondary" id="driveRestoreBtn" onclick="driveLoadList()">Restore from Google Drive</button>
+        </div>
+        <div id="driveList" style="margin-top:10px"></div>
+        <details style="margin-top:12px">
+          <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brand-dk)">Drive Settings</summary>
+          <p class="sub">Signed in with Google. Backups go to the folder "ASM Backups" in your own Google Drive. Google asks for a quick confirmation about once an hour.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn secondary" id="driveTestBtn" onclick="driveTestConnection()">Test Connection</button>
+            <button class="btn danger" onclick="driveGoogleDisconnect()">Disconnect</button>
+          </div>
+        </details>
+      </div>
     </div>
     <div class="card">
       <h3 style="margin-top:0">Reset All Data</h3>
@@ -2000,9 +2029,288 @@ function doReset(){
   }, 'Reset All', 'Confirm Reset');
 }
 
+/* ===================== GOOGLE DRIVE BACKUP MODULE (isolated - every function is separate) =====================
+   File in Drive: rent-manager-<year>.json  (year of the backup date, overwritten on each backup)
+   Google sign-in only. No automatic backup - a daily reminder message only. */
+const DRIVE_APP_NAME='rent-manager';
+const DRIVE_AUTO_HOUR=20; // reminder time: 8 PM
+const DRIVE_STORE={ last:'asm_rm2_drive_lastSuccess', auto:'asm_rm2_drive_autoOn', gflag:'asm_rm2_drive_google' };
+const DRIVE_GOOGLE_CLIENT_ID='978793704970-e1isrkd8too2qlistrtpqdgn8oj2h98j.apps.googleusercontent.com';
+const DRIVE_GOOGLE_SCOPE='https://www.googleapis.com/auth/drive.file';
+const DRIVE_GOOGLE_FOLDER='ASM Backups';
+let driveBusy=false, driveGToken=null, driveGExpiry=0, driveGClient=null, driveGWaiter=null, driveGFolderId=null;
+
+/* ---- small storage helpers ---- */
+function driveRead(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
+function driveWrite(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } }
+function driveIsConnected(){ return driveRead(DRIVE_STORE.gflag)==='1'; }
+function driveLastSuccess(){ return parseInt(driveRead(DRIVE_STORE.last),10)||0; }
+function driveAutoEnabled(){ return driveRead(DRIVE_STORE.auto)==='1'; }
+function driveFormatTime(ms){
+  const d=new Date(ms), p=n=>String(n).padStart(2,'0');
+  let h=d.getHours(); const ap=h>=12?'PM':'AM'; h=h%12||12;
+  return `${p(d.getDate())}/${p(d.getMonth()+1)}/${d.getFullYear()} ${h}:${p(d.getMinutes())} ${ap}`;
+}
+
+/* ---- Google sign-in token ---- */
+function driveGoogleTokenValid(){ return !!driveGToken && Date.now()<driveGExpiry-60000; }
+function driveGoogleInitClient(){
+  if(driveGClient) return '';
+  if(!(window.google && google.accounts && google.accounts.oauth2)){
+    return 'Google sign-in could not load. Check your internet, and open this app in Chrome.';
+  }
+  driveGClient=google.accounts.oauth2.initTokenClient({
+    client_id:DRIVE_GOOGLE_CLIENT_ID,
+    scope:DRIVE_GOOGLE_SCOPE,
+    callback:function(resp){
+      if(resp && resp.access_token){
+        driveGToken=resp.access_token;
+        driveGExpiry=Date.now()+(Number(resp.expires_in||3600)*1000);
+        if(driveGWaiter){ driveGWaiter.resolve(driveGToken); driveGWaiter=null; }
+      } else if(driveGWaiter){
+        driveGWaiter.reject(new Error((resp && (resp.error_description||resp.error))||'Google sign-in failed.'));
+        driveGWaiter=null;
+      }
+    },
+    error_callback:function(){
+      if(driveGWaiter){
+        driveGWaiter.reject(new Error('The Google window could not open. Allow pop-ups for this site and try again.'));
+        driveGWaiter=null;
+      }
+    }
+  });
+  return '';
+}
+function driveGoogleToken(){
+  if(driveGoogleTokenValid()) return Promise.resolve(driveGToken);
+  const bad=driveGoogleInitClient();
+  if(bad) return Promise.reject(new Error(bad));
+  return new Promise(function(resolve,reject){
+    driveGWaiter={resolve:resolve,reject:reject};
+    driveGClient.requestAccessToken({prompt: driveRead(DRIVE_STORE.gflag)==='1' ? '' : 'consent'});
+  });
+}
+async function driveGoogleApi(url,opts){
+  const token=await driveGoogleToken();
+  const o=Object.assign({},opts||{});
+  o.headers=Object.assign({},o.headers||{},{Authorization:'Bearer '+token});
+  const res=await fetch(url,o);
+  if(!res.ok){
+    if(res.status===401){ driveGToken=null; throw new Error('Google sign-in expired. Please press the button again.'); }
+    if(res.status===403) throw new Error('Google Drive refused the request. Check that the Drive permission was allowed.');
+    if(res.status===404){ driveGFolderId=null; throw new Error('Google Drive could not find the file or folder.'); }
+    throw new Error('Google Drive error '+res.status+'.');
+  }
+  return res;
+}
+
+/* ---- Drive folder / file helpers ---- */
+async function driveFindFolder(){
+  if(driveGFolderId) return driveGFolderId;
+  const q="name='"+DRIVE_GOOGLE_FOLDER+"' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+  const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)&spaces=drive');
+  const j=await r.json();
+  driveGFolderId=(j.files && j.files[0])?j.files[0].id:null;
+  return driveGFolderId;
+}
+async function driveEnsureFolder(){
+  const found=await driveFindFolder();
+  if(found) return found;
+  const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:DRIVE_GOOGLE_FOLDER,mimeType:'application/vnd.google-apps.folder'})
+  });
+  const j=await r.json();
+  driveGFolderId=j.id;
+  return driveGFolderId;
+}
+async function driveFindFile(folderId,name){
+  const q="name='"+name+"' and '"+folderId+"' in parents and trashed=false";
+  const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,modifiedTime)&spaces=drive');
+  const j=await r.json();
+  return (j.files && j.files[0])?j.files[0]:null;
+}
+async function driveUploadFile(folderId,name,content){
+  const existing=await driveFindFile(folderId,name);
+  if(existing){
+    await driveGoogleApi('https://www.googleapis.com/upload/drive/v3/files/'+existing.id+'?uploadType=media',{
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body:content
+    });
+  } else {
+    const boundary='asmboundary'+Date.now();
+    const meta=JSON.stringify({name:name,parents:[folderId],mimeType:'application/json'});
+    const body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+
+      '\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+content+'\r\n--'+boundary+'--';
+    await driveGoogleApi('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+      method:'POST', headers:{'Content-Type':'multipart/related; boundary='+boundary}, body:body
+    });
+  }
+}
+function driveErrText(e){
+  if(e && (e instanceof TypeError || e.name==='TypeError')) return 'Could not reach Google Drive. Check your internet.';
+  return (e && e.message)?e.message:'Google Drive problem.';
+}
+
+/* ---- sign in / out ---- */
+async function driveGoogleSignIn(){
+  try{ await driveGoogleToken(); }
+  catch(e){ toast((e && e.message)?e.message:'Sign-in failed.', true); return; }
+  if(!driveIsConnected()){ driveWrite(DRIVE_STORE.auto,'0'); driveWrite(DRIVE_STORE.last,'0'); }
+  driveWrite(DRIVE_STORE.gflag,'1');
+  driveRenderStatus('');
+  toast('Signed in. Press Backup to Google Drive to save your first backup.');
+}
+function driveGoogleDisconnect(){
+  try{
+    if(driveGToken && window.google && google.accounts && google.accounts.oauth2){
+      google.accounts.oauth2.revoke(driveGToken,function(){});
+    }
+  }catch(e){}
+  driveGToken=null; driveGExpiry=0; driveGFolderId=null;
+  driveWrite(DRIVE_STORE.gflag,''); driveWrite(DRIVE_STORE.auto,'0');
+  const l=document.getElementById('driveList'); if(l) l.innerHTML='';
+  driveRenderStatus('');
+  toast('Disconnected from Google. Your files stay in your Drive.');
+}
+async function driveTestConnection(){
+  const btn=document.getElementById('driveTestBtn');
+  if(btn){ btn.disabled=true; btn.textContent='Testing...'; }
+  try{ await driveGoogleToken(); driveRenderStatus(''); toast('Connected. Your Google Drive is ready.'); }
+  catch(e){ toast(driveErrText(e), true); }
+  if(btn){ btn.disabled=false; btn.textContent='Test Connection'; }
+}
+
+/* ---- backup ---- */
+function driveBuildPayload(year){
+  return { version:'1.0', app:DRIVE_APP_NAME, year:Number(year), exportedAt:new Date().toISOString(),
+    properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes() };
+}
+function driveSetBusyUI(busy){
+  const b=document.getElementById('driveBackupBtn'); if(!b) return;
+  b.disabled=busy; b.textContent=busy?'Backing up...':'Backup to Google Drive';
+}
+async function driveBackupNow(){
+  if(driveBusy) return;
+  if(!driveIsConnected()){ toast('Sign in with Google first.', true); return; }
+  // Never replace the Drive file with empty data (e.g. new phone / cleared memory)
+  if(loadProps().length===0 && loadRents().length===0){
+    toast('No data to back up. If this is a new phone, restore your data first.', true); return;
+  }
+  driveBusy=true; driveSetBusyUI(true);
+  const year=new Date().getFullYear();
+  const name=DRIVE_APP_NAME+'-'+year+'.json';
+  let fail='';
+  try{
+    const folderId=await driveEnsureFolder();
+    await driveUploadFile(folderId,name,JSON.stringify(driveBuildPayload(year)));
+  }catch(e){ fail=driveErrText(e); }
+  driveBusy=false; driveSetBusyUI(false);
+  if(!fail){
+    driveWrite(DRIVE_STORE.last,String(Date.now())); driveWrite(DRIVE_STORE.auto,'1');
+    driveRenderStatus('');
+    toast('Backup saved to Google Drive ('+name+')');
+  } else {
+    driveRenderStatus('Backup failed: '+fail);
+    toast('Backup failed: '+fail, true);
+  }
+}
+
+/* ---- restore from Drive ---- */
+async function driveLoadList(){
+  const btn=document.getElementById('driveRestoreBtn'), box=document.getElementById('driveList');
+  if(!box) return;
+  if(btn){ btn.disabled=true; btn.textContent='Loading...'; }
+  box.innerHTML='';
+  try{
+    const folderId=await driveFindFolder();
+    let files=[];
+    if(folderId){
+      const q="'"+folderId+"' in parents and trashed=false";
+      const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,modifiedTime)&pageSize=200&spaces=drive');
+      const j=await r.json();
+      const re=new RegExp('^'+DRIVE_APP_NAME+'-(\\d{4}|\\d{2}-\\d{2}-\\d{4})\\.json$');
+      files=(j.files||[]).filter(f=>re.test(f.name)).sort((a,b)=>String(b.modifiedTime).localeCompare(String(a.modifiedTime)));
+    }
+    if(!files.length){ box.innerHTML='<p class="sub">No Rent Manager backup found in your Google Drive.</p>'; }
+    else{
+      box.innerHTML=files.map(f=>`<div class="card" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><div class="name" style="font-size:14px">${esc(f.name)}</div><div class="sub">Saved ${esc(driveFormatTime(Date.parse(f.modifiedTime)))}</div></div><button class="btn small" onclick="driveRestoreFile(${jsq(f.id)},${jsq(f.name)})">Restore</button></div>`).join('');
+    }
+  }catch(e){ toast(driveErrText(e), true); }
+  if(btn){ btn.disabled=false; btn.textContent='Restore from Google Drive'; }
+}
+function driveRestoreFile(fileId,name){
+  askConfirm('Restoring '+name+' will REPLACE all current Property and Rent data on this device. Take a backup first if needed. Continue?', async ()=>{
+    try{
+      const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media');
+      const data=JSON.parse(await r.text());
+      driveApplyRestore(data);
+    }catch(e){ toast((e && e.name==='SyntaxError')?'Invalid backup file':driveErrText(e), true); }
+  }, 'Restore', 'Confirm Restore');
+}
+function driveApplyRestore(data){
+  if(!data || !Array.isArray(data.properties) || !Array.isArray(data.rents)){ toast('Invalid backup file', true); return; }
+  if(!saveProps(data.properties)) return;
+  if(!saveRents(data.rents)) return;
+  const locs=Array.isArray(data.locations)?data.locations.slice():[];
+  data.properties.forEach(p=>{ if(p.location && !locs.some(l=>l.toLowerCase()===p.location.toLowerCase())) locs.push(p.location); });
+  saveLocations(locs);
+  if(Array.isArray(data.taxTypes) && data.taxTypes.length) saveTaxTypes(data.taxTypes);
+  renderPropList(); renderRentList();
+  toast('Data restored successfully from Google Drive');
+}
+
+/* ---- daily reminder (message only - never saves by itself) ---- */
+function driveLastDueTime(nowMs){
+  const d=new Date(nowMs); d.setHours(DRIVE_AUTO_HOUR,0,0,0);
+  if(d.getTime()>nowMs) d.setDate(d.getDate()-1);
+  return d.getTime();
+}
+function driveIsDue(){
+  if(!driveIsConnected() || !driveAutoEnabled()) return false;
+  return driveLastSuccess()<driveLastDueTime(Date.now());
+}
+function driveRenderBanner(){
+  const el=document.getElementById('driveBanner'); if(!el) return;
+  if(!(driveIsDue() && !driveBusy)){ el.dataset.shown=''; el.style.display='none'; el.textContent=''; return; }
+  if(el.dataset.shown==='1') return;
+  el.dataset.shown='1'; el.textContent='';
+  el.style.cssText='display:block;background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:13px;line-height:1.4';
+  const p=document.createElement('div');
+  p.textContent='Daily backup: your data was not saved to Google Drive since yesterday evening.';
+  const b=document.createElement('button');
+  b.type='button'; b.className='btn small'; b.style.marginTop='8px'; b.textContent='Backup now';
+  b.onclick=function(){ driveBackupNow(); };
+  el.appendChild(p); el.appendChild(b);
+}
+
+/* ---- screen status ---- */
+function driveRenderStatus(errMsg){
+  const connected=driveIsConnected();
+  const quiet=document.getElementById('driveQuietRow'), main=document.getElementById('driveMain');
+  if(quiet) quiet.style.display=connected?'none':'block';
+  if(main) main.style.display=connected?'block':'none';
+  const st=document.getElementById('driveStatusLine'), last=document.getElementById('driveLastLine'), auto=document.getElementById('driveAutoLine');
+  if(st){
+    if(errMsg){ st.textContent=errMsg; st.style.color='var(--red)'; }
+    else{ st.textContent='Connected (Google sign-in)'; st.style.color='var(--brand)'; }
+  }
+  if(last){ const t=driveLastSuccess(); last.textContent=t?('Last Drive backup: '+driveFormatTime(t)):'Last Drive backup: not yet'; }
+  if(auto) auto.textContent=driveAutoEnabled()
+    ? 'Daily reminder: when a backup is pending you will see a Backup now button on top. Google asks for a quick confirmation about once an hour.'
+    : 'The daily reminder starts after your first Drive backup.';
+  driveRenderBanner();
+}
+function driveInit(){
+  driveRenderStatus('');
+  setInterval(driveRenderBanner,60*1000);
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden) driveRenderBanner(); });
+}
+/* ===================== END GOOGLE DRIVE BACKUP MODULE ===================== */
+
 /* ===================== INIT ===================== */
 renderRentList();
 renderPropList();
+driveInit();
 </script>
 </body>
 </html>
