@@ -138,8 +138,9 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
 </head>
 <body>
 
-<header>
-  <div><h1>ASM Rent Manager</h1><div class="tag">Powered by A.S.M Consultancy Service · Chidambaram</div></div>
+<header style="position:relative">
+  <button type="button" onclick="helpOpen()" style="position:absolute;top:10px;right:10px;background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.45);border-radius:999px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer">❓ Help</button>
+  <div style="padding-right:70px"><h1>ASM Rent Manager</h1><div class="tag">Powered by A.S.M Consultancy Service · Chidambaram</div></div>
 </header>
 
 <nav class="tabs">
@@ -240,6 +241,14 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
   <h2 id="driveMsgTitle"></h2>
   <p class="sub" id="driveMsgText"></p>
   <div class="modal-actions"><button class="btn" onclick="closeModal('driveMsgBg')">OK</button></div>
+</div></div>
+
+<!-- ============ HELP PANEL (isolated Help module) ============ -->
+<div class="modal-bg" id="helpBg" style="z-index:93;align-items:center" onclick="if(event.target===this) helpClose()"><div class="modal" style="max-width:420px;margin-bottom:0;position:relative">
+  <button type="button" aria-label="Close" onclick="helpClose()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:22px;line-height:1;color:#64748b;cursor:pointer">✕</button>
+  <h2 id="helpTitle" style="padding-right:28px">Help</h2>
+  <div id="helpBody" style="max-height:60vh;overflow-y:auto"></div>
+  <button type="button" class="btn secondary" id="helpBackBtn" style="display:none;width:100%;margin-top:14px" onclick="helpShowList()">← Back</button>
 </div></div>
 
 <!-- ============ FIRST-RUN SCREEN (only when this device has no data) ============ -->
@@ -2331,6 +2340,45 @@ function driveInit(){
   document.addEventListener('visibilitychange',function(){ if(!document.hidden) driveRenderBanner(); });
 }
 /* ===================== END GOOGLE DRIVE BACKUP MODULE ===================== */
+
+/* ===================== HELP MODULE (isolated - text only, never touches data) ===================== */
+const HELP_PRIVACY_URL='https://asm-cdm.github.io/asm-privacy/';
+const HELP_TOPICS=[
+  {icon:'🏠',title:'Rent',text:'Manage your tenants. Press + Add Tenant to enter the tenant, property, rent and advance details and add their ID files. Open a tenant to add rent rows (+ Add Month), write a note on a row, view or download the PDF, edit the details, or press Vacate when the tenant leaves. Use the search box to find a tenant, and View/PDF for a report.'},
+  {icon:'🏢',title:'Property',text:'Manage your properties. Press + Add Property to enter the property details and tax numbers. Open a property to record tax or account payments (+ Add Payment), add Maintenance expenses, view or download its PDF, edit it, or Mark as Sold. Search and View/PDF work the same way as in the Rent tab.'},
+  {icon:'💾',title:'Backup / Restore',text:'Keep your data safe. Download Backup saves a file on your phone, and Restore from File brings it back. Sign in with Google to back up to your own Google Drive. On a new phone, sign in with the same Google account and press Restore from Google Drive. Reset All Data erases everything, so use it carefully.'}
+];
+function helpOpen(){ helpShowList(); openModalEl('helpBg'); }
+function helpClose(){ closeModal('helpBg'); }
+function helpShowList(){
+  document.getElementById('helpTitle').textContent='❓ Help';
+  document.getElementById('helpBackBtn').style.display='none';
+  const body=document.getElementById('helpBody'); body.innerHTML='';
+  HELP_TOPICS.forEach(function(t,i){
+    const b=document.createElement('button');
+    b.type='button'; b.className='btn secondary';
+    b.style.cssText='display:block;width:100%;text-align:left;margin-bottom:8px';
+    b.textContent=t.icon+' '+t.title;
+    b.onclick=function(){ helpShowTopic(i); };
+    body.appendChild(b);
+  });
+  const pr=document.createElement('a');
+  pr.href=HELP_PRIVACY_URL; pr.target='_blank'; pr.rel='noopener'; pr.className='btn secondary';
+  pr.style.cssText='display:block;width:100%;text-align:left;margin-bottom:8px;text-decoration:none;box-sizing:border-box';
+  pr.textContent='🔒 Privacy Policy';
+  body.appendChild(pr);
+}
+function helpShowTopic(i){
+  const t=HELP_TOPICS[i];
+  document.getElementById('helpTitle').textContent=t.icon+' '+t.title;
+  const body=document.getElementById('helpBody'); body.innerHTML='';
+  const p=document.createElement('p');
+  p.style.cssText='font-size:15px;color:#334155;line-height:1.6';
+  p.textContent=t.text;
+  body.appendChild(p);
+  document.getElementById('helpBackBtn').style.display='block';
+}
+/* ===================== END HELP MODULE ===================== */
 
 /* ===================== FIRST-RUN SCREEN MODULE (isolated) =====================
    Shows once when this device has no data, so a new phone is not started empty by mistake. */
