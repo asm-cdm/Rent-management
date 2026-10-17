@@ -168,6 +168,7 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
   <section id="sec-property" class="section">
     <div class="toolbar">
       <input type="text" id="propSearch" placeholder="Search property, address...">
+      <button class="btn secondary" onclick="payAcctOpen()">Payment Accounts</button>
       <button class="btn secondary" onclick="openReportScope('property')">Property Reports</button>
       <button class="btn" onclick="openPropertyForm()">+ Add Property</button>
     </div>
@@ -309,12 +310,14 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
   </div>
   <div class="field"><label style="display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink)"><input type="checkbox" id="propOwnOcc" style="width:auto" onchange="payToggleSection()"> Own Occupation (owner-occupied — no rent tenant, won't appear in Rent module)</label></div>
   <div id="propPaySection">
-    <div class="field"><label>Owner Payment Details (for rent) — Account Holder Name <span class="req">*</span></label><input type="text" id="propPayHolder"></div>
-    <div class="field"><label>Bank Name &amp; Branch</label><input type="text" id="propPayBank"></div>
-    <div class="field"><label>Account Number</label><input type="text" id="propPayAcc" inputmode="numeric"></div>
-    <div class="field"><label>IFSC Code</label><input type="text" id="propPayIfsc" style="text-transform:uppercase"></div>
-    <div class="field"><label>GPay Number (or UPI ID)</label><input type="text" id="propPayGpay"></div>
-    <p class="sub">Holder name is required, plus at least one of bank details or GPay. These print in the agreement.</p>
+    <div class="field"><label>Rent Payment — Bank Account</label>
+      <div class="searchsel"><input type="text" id="propPayBankSearch" placeholder="Type to find a saved bank account..." oninput="payOnType('bank')" onfocus="payFilterOpts('bank')">
+        <input type="hidden" id="propPayBank"><div class="opts" id="propPayBankOpts"></div></div></div>
+    <div class="field"><label>Rent Payment — GPay</label>
+      <div class="searchsel"><input type="text" id="propPayGpaySearch" placeholder="Type to find a saved GPay..." oninput="payOnType('gpay')" onfocus="payFilterOpts('gpay')">
+        <input type="hidden" id="propPayGpay"><div class="opts" id="propPayGpayOpts"></div></div></div>
+    <p class="sub">Choose a bank account, a GPay, or both (at least one). They print in the agreement.</p>
+    <button type="button" class="btn secondary small" onclick="payAcctOpen()">Manage Payment Accounts</button>
   </div>
 
   <div class="field"><label>Linked Property? (shares Tax/Water/Drainage No. with a Main property — e.g. Ground Floor & First Floor of the same building)</label>
@@ -503,6 +506,32 @@ footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
 
 <!-- ============ AGREEMENT FORM MODAL ============ -->
 <input type="file" id="agrFileInput" accept="application/pdf,.pdf" style="display:none" onchange="agrHandleUpload(event)">
+
+<!-- ============ PAYMENT ACCOUNTS ============ -->
+<div class="modal-bg" id="payAcctBg" style="z-index:60"><div class="modal" style="max-width:480px">
+  <h2>Payment Accounts</h2>
+  <div id="payAcctList"></div>
+  <div id="payAcctFormBox" style="display:none">
+    <h3 id="payAcctFormTitle"></h3>
+    <input type="hidden" id="payAcctKind"><input type="hidden" id="payAcctId">
+    <div class="field"><label>Account Holder Name <span class="req">*</span></label><input type="text" id="payAcctHolder"></div>
+    <div id="payAcctBankGrp">
+      <div class="field"><label>Bank Name &amp; Branch</label><input type="text" id="payAcctBankName"></div>
+      <div class="field"><label>Account Number</label><input type="text" id="payAcctNo" inputmode="numeric"></div>
+      <div class="field"><label>IFSC Code</label><input type="text" id="payAcctIfsc" style="text-transform:uppercase"></div>
+    </div>
+    <div id="payAcctGpayGrp"><div class="field"><label>GPay Number (or UPI ID) <span class="req">*</span></label><input type="text" id="payAcctGpay"></div></div>
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="payAcctShowList()">Cancel</button>
+      <button class="btn" onclick="payAcctSave()">Save</button>
+    </div>
+  </div>
+  <div class="modal-actions" id="payAcctMainBtns">
+    <button class="btn secondary" onclick="payAcctClose()">Close</button>
+    <button class="btn secondary" onclick="payAcctNew('gpay')">+ Add GPay</button>
+    <button class="btn" onclick="payAcctNew('bank')">+ Add Bank Account</button>
+  </div>
+</div></div>
 
 <!-- ============ PDF VIEWER (one screen for every report) ============ -->
 <div class="modal-bg" id="pdfViewBg" style="z-index:80;padding:0;align-items:stretch">
@@ -820,7 +849,8 @@ function saveProperty(){
     ownOccupation: ownOcc,
     taxNumbers: editPropTaxNumbers,
     materials: editPropMaterials,
-    pay: payRes.data,
+    payBankId: payRes.data.payBankId,
+    payGpayId: payRes.data.payGpayId,
     taxPayments: existing ? existing.taxPayments||[] : [],
     status: existing ? existing.status : 'Active',
     soldInfo: existing ? existing.soldInfo : null
@@ -964,7 +994,7 @@ function addNewTypeGeneric(searchId,hiddenId,boxId,t,listName){
   if(!types.some(x=>x.toLowerCase()===t.toLowerCase())){ types.push(t); setExtList(listName,types); }
   selectTypeGeneric(searchId,hiddenId,boxId,t);
 }
-document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { ['taxPayTypeOpts','propTaxNumTypeOpts','propLocationOpts','reportScopeLocationOpts','reportScopePropOpts'].forEach(id=>{ const o=document.getElementById(id); if(o) o.classList.remove('show'); }); } });
+document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { ['taxPayTypeOpts','propTaxNumTypeOpts','propLocationOpts','reportScopeLocationOpts','reportScopePropOpts','propPayBankOpts','propPayGpayOpts'].forEach(id=>{ const o=document.getElementById(id); if(o) o.classList.remove('show'); }); } });
 function openTaxPay(propId){
   document.getElementById('taxPayPropId').value=propId;
   ['taxPayRefNo','taxPayAmt','taxPayReceipt'].forEach(f=>document.getElementById(f).value='');
@@ -1928,50 +1958,131 @@ function payToggleSection(){
   const own=document.getElementById('propOwnOcc').checked;
   document.getElementById('propPaySection').style.display=own?'none':'';
 }
+/* ---- saved payment accounts: enter once, choose per property (property keeps a reference, so one edit updates everything) ---- */
+const LS_PAYACCT='asm_rm2_payaccounts';
+function loadPayAccts(){ try{ return JSON.parse(localStorage.getItem(LS_PAYACCT)||'[]'); }catch(e){ return []; } }
+function savePayAccts(a){ return saveToStorage(LS_PAYACCT,a); }
+function payAcctLabel(a){
+  if(a.kind==='gpay') return a.holder+' – GPay '+a.gpay;
+  return a.holder+' – '+(a.bank||'Bank')+(a.acc?' ••'+a.acc.slice(-4):'');
+}
+function payCap(kind){ return kind==='bank'?'Bank':'Gpay'; }
+function payOnType(kind){ document.getElementById('propPay'+payCap(kind)).value=''; payFilterOpts(kind); }
+function payFilterOpts(kind){
+  const cap=payCap(kind);
+  const q=document.getElementById('propPay'+cap+'Search').value.trim().toLowerCase();
+  const list=loadPayAccts().filter(a=>a.kind===kind && (payAcctLabel(a)+' '+(a.acc||'')+' '+(a.ifsc||'')).toLowerCase().includes(q));
+  const box=document.getElementById('propPay'+cap+'Opts');
+  let html='<div class="opt sub" onclick="payPickAcct(\''+kind+'\',\'\')">— None —</div>';
+  html+=list.map(a=>'<div class="opt" onclick="payPickAcct(\''+kind+'\',\''+a.id+'\')">'+esc(payAcctLabel(a))+'</div>').join('');
+  if(!list.length) html+='<div class="opt sub">No saved '+(kind==='bank'?'bank account':'GPay')+' — use Manage Payment Accounts</div>';
+  box.innerHTML=html; box.classList.add('show');
+}
+function payPickAcct(kind,id){
+  const cap=payCap(kind); const a=id?loadPayAccts().find(x=>x.id===id):null;
+  document.getElementById('propPay'+cap).value=a?a.id:'';
+  document.getElementById('propPay'+cap+'Search').value=a?payAcctLabel(a):'';
+  document.getElementById('propPay'+cap+'Opts').classList.remove('show');
+}
 function payFillForm(id){
-  const p=id?loadProps().find(x=>x.id===id):null; const d=(p&&p.pay)||{};
-  document.getElementById('propPayHolder').value=d.holder||'';
-  document.getElementById('propPayBank').value=d.bank||'';
-  document.getElementById('propPayAcc').value=d.acc||'';
-  document.getElementById('propPayIfsc').value=d.ifsc||'';
-  document.getElementById('propPayGpay').value=d.gpay||'';
+  const p=id?loadProps().find(x=>x.id===id):null;
+  payPickAcct('bank',(p&&p.payBankId)||''); payPickAcct('gpay',(p&&p.payGpayId)||'');
   payToggleSection();
 }
-function payRead(){
-  const v=id=>document.getElementById(id).value.trim();
-  return {holder:v('propPayHolder'), bank:v('propPayBank'), acc:v('propPayAcc').replace(/\s+/g,''), ifsc:v('propPayIfsc').toUpperCase().replace(/\s+/g,''), gpay:v('propPayGpay').replace(/\s+/g,'')};
-}
 function payValidate(ownOcc){
-  const d=payRead();
-  if(ownOcc) return {ok:true,data:d};
-  if(!d.holder) return {ok:false,msg:'Account Holder Name is required'};
-  if(!d.bank && !d.acc && !d.ifsc && !d.gpay) return {ok:false,msg:'Enter bank details or GPay (at least one)'};
-  if(d.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(d.ifsc)) return {ok:false,msg:'IFSC must be 11 characters: 4 letters, then 0, then 6 letters or digits (e.g. SBIN0001234)'};
-  if(d.acc && !/^\d{9,18}$/.test(d.acc)) return {ok:false,msg:'Account Number must be 9 to 18 digits'};
-  if(d.gpay){
+  const A=loadPayAccts();
+  let b=document.getElementById('propPayBank').value, g=document.getElementById('propPayGpay').value;
+  if(!A.some(x=>x.id===b&&x.kind==='bank')) b=''; if(!A.some(x=>x.id===g&&x.kind==='gpay')) g='';
+  if(!ownOcc && !b && !g) return {ok:false,msg:'Choose a Bank account or a GPay (at least one). Add accounts with Manage Payment Accounts.'};
+  return {ok:true,data:{payBankId:b,payGpayId:g}};
+}
+function payHas(d){ return !!(d && d.holder && (d.bank||d.acc||d.ifsc||d.gpay)); }
+function payForOwn(p){
+  if(!p) return null;
+  const A=loadPayAccts();
+  const b=A.find(x=>x.id===p.payBankId&&x.kind==='bank'), g=A.find(x=>x.id===p.payGpayId&&x.kind==='gpay');
+  if(b||g){ const base=b||g;
+    return {holder:base.holder, bank:b?b.bank:'', acc:b?b.acc:'', ifsc:b?b.ifsc:'', gpay:g?g.gpay:'', gpayHolder:(b&&g&&g.holder!==b.holder)?g.holder:''}; }
+  return payHas(p.pay)?p.pay:null;
+}
+function payFor(p){
+  const d=payForOwn(p); if(d) return d;
+  if(p && p.linkedTo){ const m=loadProps().find(x=>x.id===p.linkedTo); if(m && m.id!==p.id) return payForOwn(m); }
+  return null;
+}
+function payRowsEn(d){
+  return [['Account Holder',d.holder],['Bank & Branch',d.bank],['Account Number',d.acc],['IFSC',d.ifsc],['GPay / UPI',d.gpay?d.gpay+(d.gpayHolder?' ('+d.gpayHolder+')':''):'']].filter(x=>x[1]);
+}
+function payViewHtml(p){
+  const d=payFor(p);
+  if(!payHas(d)) return (p.ownOccupation||p.status==='Sold') ? '' : '<div class="sub" style="margin-top:8px">Rent payment details: not chosen yet — use Edit Property to choose a bank account or GPay.</div>';
+  return '<h3>Rent Payment Details</h3><div class="grid2">'+payRowsEn(d).map(x=>'<div><b>'+esc(x[0])+':</b> '+esc(x[1])+'</div>').join('')+'</div>';
+}
+function payMigrate(){
+  const props=loadProps(); const accts=loadPayAccts(); let changed=false;
+  const key=a=>[a.kind,(a.holder||'').toLowerCase(),(a.bank||'').toLowerCase(),a.acc||'',(a.ifsc||'').toLowerCase(),(a.gpay||'').toLowerCase()].join('|');
+  const ensure=a=>{ let f=accts.find(x=>key(x)===key(a)); if(!f){ a.id=uid(); accts.push(a); f=a; } return f.id; };
+  props.forEach(p=>{
+    if(p.pay && typeof p.pay==='object'){
+      const d=p.pay;
+      if(d.holder && (d.bank||d.acc||d.ifsc)) p.payBankId=ensure({kind:'bank',holder:d.holder,bank:d.bank||'',acc:d.acc||'',ifsc:d.ifsc||'',gpay:''});
+      if(d.holder && d.gpay) p.payGpayId=ensure({kind:'gpay',holder:d.holder,bank:'',acc:'',ifsc:'',gpay:d.gpay});
+      delete p.pay; changed=true;
+    }
+  });
+  if(changed){ savePayAccts(accts); saveProps(props); }
+}
+/* ---- Payment Accounts screen ---- */
+function payAcctOpen(){ payAcctShowList(); openModalEl('payAcctBg'); }
+function payAcctClose(){ closeModal('payAcctBg'); }
+function payAcctShowList(){
+  document.getElementById('payAcctFormBox').style.display='none';
+  document.getElementById('payAcctMainBtns').style.display='flex';
+  const A=loadPayAccts(); const box=document.getElementById('payAcctList');
+  box.innerHTML=A.length?A.map(a=>'<div class="card" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><div class="name" style="font-size:14px">'+esc(payAcctLabel(a))+'</div><div class="sub">'+esc(a.kind==='gpay'?'GPay / UPI: '+a.gpay:[a.bank,a.acc?'A/c '+a.acc:'',a.ifsc].filter(Boolean).join(' · '))+'</div></div><div style="display:flex;gap:6px"><button class="btn secondary small" onclick="payAcctEdit(\''+a.id+'\')">Edit</button><button class="btn secondary small" onclick="payAcctDelete(\''+a.id+'\')">Delete</button></div></div>').join(''):'<p class="sub">No payment accounts saved yet. Use the buttons below to add one.</p>';
+}
+function payAcctShowForm(kind,a){
+  document.getElementById('payAcctMainBtns').style.display='none';
+  document.getElementById('payAcctFormBox').style.display='block';
+  document.getElementById('payAcctKind').value=kind; document.getElementById('payAcctId').value=a?a.id:'';
+  document.getElementById('payAcctFormTitle').textContent=(a?'Edit ':'Add ')+(kind==='gpay'?'GPay':'Bank Account');
+  document.getElementById('payAcctBankGrp').style.display=kind==='bank'?'':'none';
+  document.getElementById('payAcctGpayGrp').style.display=kind==='gpay'?'':'none';
+  const v=(id,x)=>document.getElementById(id).value=x||'';
+  v('payAcctHolder',a&&a.holder); v('payAcctBankName',a&&a.bank); v('payAcctNo',a&&a.acc); v('payAcctIfsc',a&&a.ifsc); v('payAcctGpay',a&&a.gpay);
+}
+function payAcctNew(kind){ payAcctShowForm(kind,null); }
+function payAcctEdit(id){ const a=loadPayAccts().find(x=>x.id===id); if(a) payAcctShowForm(a.kind,a); }
+function payAcctSave(){
+  const kind=document.getElementById('payAcctKind').value, id=document.getElementById('payAcctId').value;
+  const v=x=>document.getElementById(x).value.trim();
+  const d={kind, holder:v('payAcctHolder'), bank:'', acc:'', ifsc:'', gpay:''};
+  if(!d.holder){ toast('Account Holder Name is required', true); return; }
+  if(kind==='bank'){
+    d.bank=v('payAcctBankName'); d.acc=v('payAcctNo').replace(/\s+/g,''); d.ifsc=v('payAcctIfsc').toUpperCase().replace(/\s+/g,'');
+    if(!d.bank && !d.acc && !d.ifsc){ toast('Enter the bank name, account number or IFSC', true); return; }
+    if(d.ifsc && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(d.ifsc)){ toast('IFSC must be 11 characters: 4 letters, then 0, then 6 letters or digits (e.g. SBIN0001234)', true); return; }
+    if(d.acc && !/^\d{9,18}$/.test(d.acc)){ toast('Account Number must be 9 to 18 digits', true); return; }
+  } else {
+    d.gpay=v('payAcctGpay').replace(/\s+/g,'');
+    if(!d.gpay){ toast('Enter the GPay number or UPI ID', true); return; }
     if(d.gpay.indexOf('@')>=0){
-      if(!/^[A-Za-z0-9._-]{2,}@[A-Za-z0-9.-]{2,}$/.test(d.gpay)) return {ok:false,msg:'UPI ID must look like name@bank'};
+      if(!/^[A-Za-z0-9._-]{2,}@[A-Za-z0-9.-]{2,}$/.test(d.gpay)){ toast('UPI ID must look like name@bank', true); return; }
     } else {
       const dg=d.gpay.replace(/-/g,'');
-      if(!/^[6-9]\d{9}$/.test(dg)) return {ok:false,msg:'GPay number must be 10 digits starting with 6, 7, 8 or 9'};
+      if(!/^[6-9]\d{9}$/.test(dg)){ toast('GPay number must be 10 digits starting with 6, 7, 8 or 9', true); return; }
       d.gpay=dg;
     }
   }
-  return {ok:true,data:d};
+  const A=loadPayAccts();
+  if(id){ const i=A.findIndex(x=>x.id===id); if(i<0) return; d.id=id; A[i]=d; } else { d.id=uid(); A.push(d); }
+  if(!savePayAccts(A)) return;
+  toast('Saved'); payAcctShowList();
 }
-function payViewHtml(p){
-  const d=p.pay||{};
-  const rows=[['Account Holder',d.holder],['Bank & Branch',d.bank],['Account Number',d.acc],['IFSC',d.ifsc],['GPay / UPI',d.gpay]].filter(x=>x[1]);
-  if(!rows.length) return (p.ownOccupation||p.status==='Sold') ? '' : '<div class="sub" style="margin-top:8px">Rent payment details: not entered yet — use Edit Property to add them.</div>';
-  return '<h3>Rent Payment Details</h3><div class="grid2">'+rows.map(x=>'<div><b>'+esc(x[0])+':</b> '+esc(x[1])+'</div>').join('')+'</div>';
-}
-
-function payHas(d){ return !!(d && d.holder && (d.bank||d.acc||d.ifsc||d.gpay)); }
-function payFor(p){
-  if(!p) return null;
-  if(payHas(p.pay)) return p.pay;
-  if(p.linkedTo){ const m=loadProps().find(x=>x.id===p.linkedTo); if(m && payHas(m.pay)) return m.pay; }
-  return null;
+function payAcctDelete(id){
+  const used=loadProps().find(p=>p.payBankId===id||p.payGpayId===id);
+  if(used){ toast('Used by property "'+used.name+'" — remove it there first', true); return; }
+  askConfirm('Delete this payment account?', ()=>{ savePayAccts(loadPayAccts().filter(x=>x.id!==id)); payAcctShowList(); }, 'Delete', 'Delete');
 }
 function pdfWrap(doc,text,x,y,maxW,lineH){
   const ls=doc.splitTextToSize(String(text),maxW); doc.text(ls,x,y); return y+ls.length*lineH;
@@ -1988,7 +2099,7 @@ function payPutMM(doc,text,x,y,maxW){
 }
 function payPdfBlock(doc,d,y,pageTitle){
   if(!payHas(d)) return y;
-  const rows=[['Account Holder',d.holder],['Bank & Branch',d.bank],['Account Number',d.acc],['IFSC',d.ifsc],['GPay / UPI',d.gpay]].filter(x=>x[1]);
+  const rows=payRowsEn(d);
   if(y+10+rows.length*6>275){ doc.addPage(); pdfHeader(doc,pageTitle); y=30; }
   doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.setTextColor(0,0,0); doc.text('Rent Payment Details',14,y); y+=6;
   doc.setFont(undefined,'normal'); doc.setFontSize(10.5);
@@ -2148,7 +2259,7 @@ function agrPayRows(F,lang){
   if(p.bank) rows.push([L.bank,p.bank]);
   if(p.acc) rows.push([L.acc,p.acc]);
   if(p.ifsc) rows.push([L.ifsc,p.ifsc]);
-  if(p.gpay) rows.push([L.gpay,p.gpay]);
+  if(p.gpay) rows.push([L.gpay,p.gpay+(p.gpayHolder?' ('+p.gpayHolder+')':'')]);
   return rows.length ? [[L.holder,p.holder]].concat(rows) : [];
 }
 function agrPayBlock(doc,F,lang,y){
@@ -2427,7 +2538,7 @@ function buildConsolidatedPropertyPdf(scopeIds, scopeLabel){
   props.forEach((p,pIdx)=>{
     const merged=getMergedTaxNumbers(p);
     if(!merged.length){
-      rows.push([p.name, '-', '-', '-', '-']);
+      rows.push([p.name, '-', '-', '-', '-', p.ownOccupation?'Own':'Rent']);
     } else {
       merged.forEach((t,i)=>{
         const lastPay=getLastPaymentForType(t.source, t.type);
@@ -2436,13 +2547,14 @@ function buildConsolidatedPropertyPdf(scopeIds, scopeLabel){
           t.type + (t.inherited?' (from Main)':''),
           t.number||'-',
           lastPay?lastPay.date:'-',
-          lastPay?'Rs.'+lastPay.amount:'-'
+          lastPay?'Rs.'+lastPay.amount:'-',
+          i===0?(p.ownOccupation?'Own':'Rent'):''
         ]);
       });
     }
-    if(pIdx < props.length-1) rows.push(['','','','','']); // blank line between properties
+    if(pIdx < props.length-1) rows.push(['','','','','','']); // blank line between properties
   });
-  y = pdfTable(doc, 14, y, [46,34,26,30,30], ['Property','Type','Number','Last Paid Date','Amount'], rows.length?rows:[['No properties in this scope','-','-','-','-']], pageTitle);
+  y = pdfTable(doc, 14, y, [40,30,26,28,28,24], ['Property','Type','Number','Last Paid Date','Amount','Own/Rent'], rows.length?rows:[['No properties in this scope','-','-','-','-','-']], pageTitle);
   pdfFooter(doc);
   return {doc, filename:`Property_Reports_${pdfScopeTag(scopeLabel)}_${todayDMYFile()}.pdf`};
 }
@@ -2579,7 +2691,7 @@ function generateScopedReport(){
 
 /* ===================== BACKUP / RESTORE ===================== */
 function doBackup(){
-  const data={properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes(), exportedAt:new Date().toISOString()};
+  const data={properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes(), payAccounts:loadPayAccts(), exportedAt:new Date().toISOString()};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
@@ -2598,6 +2710,7 @@ function doRestore(){
         if(!Array.isArray(data.properties) || !Array.isArray(data.rents)){ toast('Invalid backup file', true); return; }
         if(!saveProps(data.properties)) return;
         if(!saveRents(data.rents)) return;
+        if(Array.isArray(data.payAccounts)) savePayAccts(data.payAccounts); payMigrate();
         // pickers: restore saved lists, and always include any location already used by a property
         const locs=Array.isArray(data.locations)?data.locations.slice():[];
         data.properties.forEach(p=>{ if(p.location && !locs.some(l=>l.toLowerCase()===p.location.toLowerCase())) locs.push(p.location); });
@@ -2779,7 +2892,7 @@ async function driveTestConnection(){
 /* ---- backup ---- */
 function driveBuildPayload(year){
   return { version:'1.0', app:DRIVE_APP_NAME, year:Number(year), exportedAt:new Date().toISOString(),
-    properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes() };
+    properties:loadProps(), rents:loadRents(), locations:loadLocations(), taxTypes:loadTaxTypes(), payAccounts:loadPayAccts() };
 }
 function driveSetBusyUI(busy){
   const b=document.getElementById('driveBackupBtn'); if(!b) return;
@@ -2847,6 +2960,8 @@ function driveApplyRestore(data){
   if(!data || !Array.isArray(data.properties) || !Array.isArray(data.rents)){ driveShowMessage('Restore','Invalid backup file.','⚠️'); return; }
   if(!saveProps(data.properties)) return;
   if(!saveRents(data.rents)) return;
+  if(Array.isArray(data.payAccounts)) savePayAccts(data.payAccounts); payMigrate();
+  { const lb=document.getElementById('driveList'); if(lb) lb.innerHTML=''; }
   const locs=Array.isArray(data.locations)?data.locations.slice():[];
   data.properties.forEach(p=>{ if(p.location && !locs.some(l=>l.toLowerCase()===p.location.toLowerCase())) locs.push(p.location); });
   saveLocations(locs);
@@ -2907,7 +3022,7 @@ function driveInit(){
 const HELP_PRIVACY_URL='https://asm-cdm.github.io/asm-privacy/';
 const HELP_TOPICS=[
   {icon:'🏠',title:'Rent',text:'Manage your tenants. Press + Add Tenant to enter the tenant, property, rent and advance details and add their ID files. Open a tenant to add rent rows (+ Add Month), write a note on a row, press Tenant Report to see the report on screen (the PDF button at the top right saves it; a vacated tenant has Reports with Tenant Report and Vacate Details), edit the details, or press Vacate when the tenant leaves. The report also shows the rent payment details of the property. Use the search box to find a tenant.'},
-  {icon:'🏢',title:'Property',text:'Manage your properties. Press + Add Property to enter the property details and tax numbers. Open a property to record tax or account payments (+ Add Payment), add Maintenance expenses, press Property Report to see its report on screen (the PDF button at the top right saves it), edit it, or Mark as Sold. A sold property shows Reports with Property Details and Sold Details. The Property Reports button at the top gives the report for all properties, one location or one property. Each property also holds the owner payment details: Account Holder Name is required, plus at least one of bank details (bank name and branch, account number, IFSC) or GPay number / UPI ID. They show in the property view and print in the agreement. Properties marked Own Occupation do not need them.'},
+  {icon:'🏢',title:'Property',text:'Manage your properties. Press + Add Property to enter the property details and tax numbers. Open a property to record tax or account payments (+ Add Payment), add Maintenance expenses, press Property Report to see its report on screen (the PDF button at the top right saves it), edit it, or Mark as Sold. A sold property shows Reports with Property Details and Sold Details. The Property Reports button at the top gives the report for all properties, one location or one property, with tax numbers, last paid date, amount and whether the property is Own or Rent. Save your bank accounts and GPay once with the Payment Accounts button, then choose them in each property (a bank account, a GPay, or both; at least one). Changing an account there updates every property. The choice shows in the property view and prints in the agreement. Properties marked Own Occupation do not need it.'},
   {icon:'📄',title:'Agreement (optional)',text:'Open a tenant and press Agreement. Tamil or English opens the rental agreement on screen (the PDF button at the top right saves it), filled with the tenant details: property address, name, address, ID proof, mobile numbers, rent, advance, start date (the advance date) and the materials given as other items. The payment details of the property (account holder name with the bank details or GPay that were entered) print under the clauses as Rent Payment Details. Space is left free below for anything to write by hand. To extend the agreement for a further 11 months, choose Extend – Tamil or Extend – English: the box shows the new dates (the first extension starts right after the 11 months end), and Confirm & Open saves the extension and opens one page to print and sign. In the same box you can change the monthly rent for the extended period and add an additional advance: the new rent becomes the rent of the tenant from then on (rent rows already added are not changed), and the additional advance is added to the total advance, which is what the Vacate screen starts with. The first agreement always prints the original rent and advance. The app remembers how many extensions were made for the tenant, so the next one continues from the last date. Use Reprint last to print the same page again, or Undo last extension if you confirmed by mistake. After signing, scan all the pages together as one PDF and use Replace Signed Copy (or Upload Signed Copy the first time), so one file holds the original and the extensions. Signed Copy opens it. The PDF must be under 1 MB. Agreement is optional, and uploaded files are included in Backup.'},
   {icon:'💾',title:'Backup / Restore',text:'Keep your data safe. Download Backup saves a file on your phone, and Restore from File brings it back. Sign in with Google to back up to your own Google Drive. On a new phone, sign in with the same Google account and press Restore from Google Drive. Reset All Data erases everything, so use it carefully.'}
 ];
@@ -2973,6 +3088,7 @@ function firstRunStartFresh(){
 /* ===================== END FIRST-RUN SCREEN MODULE ===================== */
 
 /* ===================== INIT ===================== */
+payMigrate();
 renderRentList();
 renderPropList();
 driveInit();
