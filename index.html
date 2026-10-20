@@ -277,7 +277,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
 <div class="modal-bg" id="driveMsgBg" style="z-index:95;align-items:center"><div class="modal" style="max-width:380px;margin-bottom:0">
   <h2 id="driveMsgTitle"></h2>
   <p class="sub" id="driveMsgText"></p>
-  <div class="modal-actions"><button class="btn" onclick="closeModal('driveMsgBg')">OK</button></div>
+  <div class="modal-actions"><button class="btn" id="driveMsgOkBtn" onclick="closeModal('driveMsgBg')">OK</button></div>
 </div></div>
 
 <!-- ============ HELP PANEL (isolated Help module) ============ -->
@@ -2733,19 +2733,21 @@ function doBackup(){
   a.href=URL.createObjectURL(blob);
   a.download=`ASM_RentManager_Backup_${todayDMYFile()}.json`;
   a.click();
-  toast('Backup downloaded');
+  driveShowMessage('Backup','Backup file downloaded to your phone. Keep it in a safe place.','✅');
 }
 function doRestore(){
   const f=document.getElementById('restoreFile').files[0];
-  if(!f){toast('Choose a backup file first');return;}
+  if(!f){driveShowMessage('Restore','Choose a backup file first.','⚠️');return;}
   askConfirm('Restoring will REPLACE all current Property and Rent data with the backup file. Continue?', ()=>{
+    driveShowBusy('Restore','Restoring now... please wait.');
     const reader=new FileReader();
+    reader.onerror=function(){ driveShowMessage('Restore','Could not read the file.','⚠️'); };
     reader.onload=function(e){
       try{
         const data=JSON.parse(e.target.result);
-        if(!Array.isArray(data.properties) || !Array.isArray(data.rents)){ toast('Invalid backup file', true); return; }
-        if(!saveProps(data.properties)) return;
-        if(!saveRents(data.rents)) return;
+        if(!Array.isArray(data.properties) || !Array.isArray(data.rents)){ driveShowMessage('Restore','Invalid backup file.','⚠️'); return; }
+        if(!saveProps(data.properties)){ driveHideMessage(); return; }
+        if(!saveRents(data.rents)){ driveHideMessage(); return; }
         if(Array.isArray(data.payAccounts)) savePayAccts(data.payAccounts); payMigrate();
         // pickers: restore saved lists, and always include any location already used by a property
         const locs=Array.isArray(data.locations)?data.locations.slice():[];
@@ -2753,8 +2755,8 @@ function doRestore(){
         saveLocations(locs);
         if(Array.isArray(data.taxTypes) && data.taxTypes.length) saveTaxTypes(data.taxTypes);
         renderPropList(); renderRentList();
-        toast('Data restored successfully');
-      }catch(err){ toast('Invalid backup file', true); }
+        driveShowMessage('Restore','Data restored successfully.','✅');
+      }catch(err){ driveShowMessage('Restore','Invalid backup file.','⚠️'); }
     };
     reader.readAsText(f);
   }, 'Restore', 'Confirm Restore');
@@ -2781,8 +2783,17 @@ let driveBusy=false, driveGToken=null, driveGExpiry=0, driveGClient=null, driveG
 function driveShowMessage(title,msg,icon){
   document.getElementById('driveMsgTitle').textContent=(icon||'ℹ️')+' '+title;
   document.getElementById('driveMsgText').textContent=msg;
+  const ok=document.getElementById('driveMsgOkBtn'); if(ok) ok.style.display='';
   openModalEl('driveMsgBg');
 }
+/* ---- "please wait" popup: no OK button until the work is finished; the result message then replaces it ---- */
+function driveShowBusy(title,msg){
+  document.getElementById('driveMsgTitle').textContent='⏳ '+title;
+  document.getElementById('driveMsgText').textContent=msg;
+  const ok=document.getElementById('driveMsgOkBtn'); if(ok) ok.style.display='none';
+  openModalEl('driveMsgBg');
+}
+function driveHideMessage(){ closeModal('driveMsgBg'); }
 
 /* ---- small storage helpers ---- */
 function driveRead(k){ try{ return localStorage.getItem(k)||''; }catch(e){ return ''; } }
@@ -2941,6 +2952,7 @@ async function driveBackupNow(){
     driveShowMessage('Drive Backup','No data to back up. If this is a new phone, restore your data first so the Drive file is not replaced with an empty one.','⚠️'); return;
   }
   driveBusy=true; driveSetBusyUI(true);
+  driveShowBusy('Drive Backup','Backing up to Google Drive now... please wait. Do not close the app.');
   const year=new Date().getFullYear();
   const name=DRIVE_APP_NAME+'-'+year+'.json';
   let fail='';
@@ -2965,6 +2977,7 @@ async function driveLoadList(){
   if(!box) return;
   if(btn){ btn.disabled=true; btn.textContent='Loading...'; }
   box.innerHTML='';
+  driveShowBusy('Google Drive','Checking your Google Drive backups... please wait.');
   try{
     const folderId=await driveFindFolder();
     let files=[];
@@ -2979,11 +2992,13 @@ async function driveLoadList(){
     else{
       box.innerHTML=files.map(f=>`<div class="card" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><div><div class="name" style="font-size:14px">${esc(f.name)}</div><div class="sub">Saved ${esc(driveFormatTime(Date.parse(f.modifiedTime)))}</div></div><button class="btn small" onclick="driveRestoreFile(${jsq(f.id)},${jsq(f.name)})">Restore</button></div>`).join('');
     }
+    if(files.length) driveHideMessage(); else driveShowMessage('Google Drive','No Rent Manager backup found in your Google Drive.','⚠️');
   }catch(e){ driveShowMessage('Google Drive',driveErrText(e),'⚠️'); }
   if(btn){ btn.disabled=false; btn.textContent='Restore from Google Drive'; }
 }
 function driveRestoreFile(fileId,name){
   askConfirm('Restoring '+name+' will REPLACE all current Property and Rent data on this device. Take a backup first if needed. Continue?', async ()=>{
+    driveShowBusy('Restore','Restoring from Google Drive now... please wait. Do not close the app.');
     try{
       const r=await driveGoogleApi('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media');
       const data=JSON.parse(await r.text());
@@ -2993,8 +3008,8 @@ function driveRestoreFile(fileId,name){
 }
 function driveApplyRestore(data){
   if(!data || !Array.isArray(data.properties) || !Array.isArray(data.rents)){ driveShowMessage('Restore','Invalid backup file.','⚠️'); return; }
-  if(!saveProps(data.properties)) return;
-  if(!saveRents(data.rents)) return;
+  if(!saveProps(data.properties)){ driveHideMessage(); return; }
+  if(!saveRents(data.rents)){ driveHideMessage(); return; }
   if(Array.isArray(data.payAccounts)) savePayAccts(data.payAccounts); payMigrate();
   { const lb=document.getElementById('driveList'); if(lb) lb.innerHTML=''; }
   const locs=Array.isArray(data.locations)?data.locations.slice():[];
