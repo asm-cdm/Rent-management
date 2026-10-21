@@ -204,7 +204,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
   <section id="sec-property" class="section">
     <div class="toolbar">
       <input type="text" id="propSearch" placeholder="Search property, address...">
-      <button class="btn secondary" onclick="payAcctOpen()">Payment Accounts</button>
+      <button class="btn secondary" onclick="payAcctOpen()">Owner Bank Details</button>
       <button class="btn secondary" onclick="openReportScope('property')">Property Reports</button>
       <button class="btn" onclick="openPropertyForm()">+ Add Property</button>
     </div>
@@ -353,7 +353,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
       <div class="searchsel"><input type="text" id="propPayGpaySearch" placeholder="Type to find a saved GPay..." oninput="payOnType('gpay')" onfocus="payFilterOpts('gpay')">
         <input type="hidden" id="propPayGpay"><div class="opts" id="propPayGpayOpts"></div></div></div>
     <p class="sub">Choose a bank account, a GPay, or both (at least one). They print in the agreement.</p>
-    <button type="button" class="btn secondary small" onclick="payAcctOpen()">Manage Payment Accounts</button>
+    <button type="button" class="btn secondary small" onclick="payAcctOpen()">Edit Owner Bank Details</button>
   </div>
 
   <div class="field"><label>Linked Property? (shares Tax/Water/Drainage No. with a Main property — e.g. Ground Floor & First Floor of the same building)</label>
@@ -545,7 +545,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
 
 <!-- ============ PAYMENT ACCOUNTS ============ -->
 <div class="modal-bg" id="payAcctBg" style="z-index:60"><div class="modal" style="max-width:480px">
-  <h2>Payment Accounts</h2>
+  <h2>Owner Bank Details</h2>
   <div id="payAcctList"></div>
   <div id="payAcctFormBox" style="display:none">
     <h3 id="payAcctFormTitle"></h3>
@@ -704,7 +704,7 @@ function renderDatePicker(){
     html+=`<div class="${cls}" onclick="dpSelect(${d})">${d}</div>`;
   }
   html+='</div>';
-  html+=`<div class="dp-foot"><button type="button" onclick="dpToday()">Today</button><button type="button" onclick="closeDatePicker()">Close</button></div>`;
+  html+=`<div class="dp-foot"><button type="button" onclick="dpToday()">Today</button>${dpTargetField==='ldgPaid_'||String(dpTargetField).indexOf('ldgPaid_')===0?'<button type="button" onclick="dpClear()">Clear</button>':''}<button type="button" onclick="closeDatePicker()">Close</button></div>`;
   document.getElementById('dpPopup').innerHTML=html;
 }
 function dpNav(delta){ dpViewDate=new Date(dpViewDate.getFullYear(), dpViewDate.getMonth()+delta, 1); renderDatePicker(); }
@@ -713,9 +713,10 @@ function dpSelect(day){
   const dd=String(day).padStart(2,'0'), mm=String(m+1).padStart(2,'0');
   document.getElementById(dpTargetField).value=`${dd}-${mm}-${y}`;
   if(dpTargetField==='vacateAdvReturn'||dpTargetField==='vacateRentBal') recalcVacateNet();
-  closeDatePicker();
+  const _t=dpTargetField; closeDatePicker(); if(_t && _t.indexOf('ldg')===0) dvFireChange(_t);
 }
-function dpToday(){ document.getElementById(dpTargetField).value=todayDMY(); closeDatePicker(); }
+function dpToday(){ document.getElementById(dpTargetField).value=todayDMY(); const _t=dpTargetField; closeDatePicker(); if(_t && _t.indexOf('ldg')===0) dvFireChange(_t); }
+function dpClear(){ const _t=dpTargetField; document.getElementById(_t).value=''; closeDatePicker(); if(_t && _t.indexOf('ldg')===0) dvFireChange(_t); }
 function closeDatePicker(){ document.getElementById('dpPopup').classList.remove('show'); dpTargetField=null; }
 
 /* ---- Small action dropdown menu (used by View PDF / Download on Tenant and Property screens) ---- */
@@ -1039,6 +1040,7 @@ function openTaxPay(propId){
   openModalEl('taxPayBg');
 }
 function saveTaxPayment(){
+  if(!dvCheckAll([['taxPayDate','Date',{required:true}]])) return;
   const propId=document.getElementById('taxPayPropId').value;
   const amt=document.getElementById('taxPayAmt').value;
   if(!amt){toast('Enter amount');return;}
@@ -1103,6 +1105,7 @@ function openExpenseForm(propId, expenseId){
   openModalEl('expenseFormBg');
 }
 function saveExpense(){
+  if(!dvCheckAll([['expenseDate','Date',{required:true}]])) return;
   const propId=document.getElementById('expensePropId').value;
   const expenseId=document.getElementById('expenseId').value;
   const date=document.getElementById('expenseDate').value.trim();
@@ -1243,6 +1246,7 @@ function openSold(propId){
   openModalEl('soldBg');
 }
 function confirmSold(){
+  if(!dvCheckAll([['soldDate','Sold Date',{required:true}]])) return;
   const propId=document.getElementById('soldPropId').value;
   let props=loadProps();
   const p=props.find(x=>x.id===propId);
@@ -1387,6 +1391,7 @@ function renderRentFileThumbs(){
   ).join('');
 }
 function saveRent(){
+  if(!dvCheckAll([['rentAdvDate','Advance Date'],['rentDueDate','Rent Due Date',{required:true}]])) return;
   const propId=document.getElementById('rentPropId').value;
   const tenantName=document.getElementById('rentTenantName').value.trim();
   const mobile1=document.getElementById('rentMobile1').value.trim();
@@ -1521,9 +1526,9 @@ function renderRentViewBody(){
     const dateSet = (row.paidDate||'').trim().length>0;
     return `
     <tr>
-      <td><input type="text" value="${esc(row.dueDate)}" onchange="updateLedgerField(${idx},'dueDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
+      <td><input type="text" id="ldgDue_${idx}" readonly value="${esc(row.dueDate)}" onclick="openDatePicker(this.id,event)" onchange="updateLedgerField(${idx},'dueDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
       <td><input type="number" value="${row.amount}" onchange="updateLedgerField(${idx},'amount',this.value)" style="width:80px"></td>
-      <td><input type="text" value="${esc(row.paidDate||'')}" onchange="updateLedgerField(${idx},'paidDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
+      <td><input type="text" id="ldgPaid_${idx}" readonly value="${esc(row.paidDate||'')}" onclick="openDatePicker(this.id,event)" onchange="updateLedgerField(${idx},'paidDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
       <td><input type="number" value="${row.paidAmount||0}" onchange="updateLedgerField(${idx},'paidAmount',this.value)" style="width:80px${dateSet?'':';background:#EDEBE4;color:#999'}" ${dateSet?'':'disabled title="Set Paid Date first"'}></td>
       <td><select onchange="updateLedgerField(${idx},'paymentType',this.value)">
         ${['Cash','UPI','Bank'].map(t=>`<option ${row.paymentType===t?'selected':''}>${esc(t)}</option>`).join('')}
@@ -1605,12 +1610,18 @@ function updateLedgerField(idx,field,val){
   let rents=loadRents();
   const r=rents.find(x=>x.id===currentRentId);
   const row=r.ledger[idx];
+  if(field==='dueDate' || field==='paidDate'){
+    const v=dvParse(val,{required:field==='dueDate', noFuture:field==='paidDate'});
+    if(!v.ok){ toast((field==='dueDate'?'Due Date: ':'Paid Date: ')+v.msg, true); renderRentViewBody(); return; }
+    val=v.value;
+  }
   if(field==='paidAmount' && parseFloat(val)>0 && !(row.paidDate||'').trim()){
     toast('Enter the Paid Date first before entering a Paid Amount', true);
     renderRentViewBody();
     return;
   }
   row[field]=val;
+  if(field==='paidDate' && !val.trim()) row.paidAmount=0;   // no Paid Date = no payment
   if(field==='paidDate' && val.trim() && !(parseFloat(row.paidAmount)>0)){
     // setting the date for the first time defaults Paid Amount to the full Rent — still editable for a partial payment
     row.paidAmount = row.amount;
@@ -1654,6 +1665,7 @@ function recalcVacateNet(){
   document.getElementById('vacateNet').textContent=net.toLocaleString('en-IN');
 }
 function confirmVacate(){
+  if(!dvCheckAll([['vacateDate','Vacate Date',{required:true}]])) return;
   const rentId=document.getElementById('vacateRentId').value;
   let rents=loadRents();
   const r=rents.find(x=>x.id===rentId);
@@ -2012,7 +2024,7 @@ function payFilterOpts(kind){
   const box=document.getElementById('propPay'+cap+'Opts');
   let html='<div class="opt sub" onclick="payPickAcct(\''+kind+'\',\'\')">— None —</div>';
   html+=list.map(a=>'<div class="opt" onclick="payPickAcct(\''+kind+'\',\''+a.id+'\')">'+esc(payAcctLabel(a))+'</div>').join('');
-  if(!list.length) html+='<div class="opt sub">No saved '+(kind==='bank'?'bank account':'GPay')+' — use Manage Payment Accounts</div>';
+  if(!list.length) html+='<div class="opt sub">No saved '+(kind==='bank'?'bank account':'GPay')+' — use Owner Bank Details</div>';
   box.innerHTML=html; box.classList.add('show');
 }
 function payPickAcct(kind,id){
@@ -2030,7 +2042,7 @@ function payValidate(ownOcc){
   const A=loadPayAccts();
   let b=document.getElementById('propPayBank').value, g=document.getElementById('propPayGpay').value;
   if(!A.some(x=>x.id===b&&x.kind==='bank')) b=''; if(!A.some(x=>x.id===g&&x.kind==='gpay')) g='';
-  if(!ownOcc && !b && !g) return {ok:false,msg:'Choose a Bank account or a GPay (at least one). Add accounts with Manage Payment Accounts.'};
+  if(!ownOcc && !b && !g) return {ok:false,msg:'Choose a Bank account or a GPay (at least one). Add accounts with Owner Bank Details.'};
   return {ok:true,data:{payBankId:b,payGpayId:g}};
 }
 function payHas(d){ return !!(d && d.holder && (d.bank||d.acc||d.ifsc||d.gpay)); }
@@ -3066,7 +3078,7 @@ function driveInit(){
 const HELP_PRIVACY_URL='https://asm-cdm.github.io/asm-privacy/';
 const HELP_TOPICS=[
   {icon:'🏠',title:'Rent',text:'Manage your tenants. Press + Add Tenant to enter the tenant, property, rent and advance details and add their ID files. Open a tenant to add rent rows (+ Add Month), write a note on a row, press Tenant Report to see the report on screen (the PDF button at the top right saves it; a vacated tenant has Reports with Tenant Report and Vacate Details), edit the details, or press Vacate when the tenant leaves. The report also shows the rent payment details of the property. Use the search box to find a tenant.'},
-  {icon:'🏢',title:'Property',text:'Manage your properties. Press + Add Property to enter the property details and tax numbers. Open a property to record tax or account payments (+ Add Payment), add Maintenance expenses, press Property Report to see its report on screen (the PDF button at the top right saves it), edit it, or Mark as Sold. A sold property shows Reports with Property Details and Sold Details. The Property Reports button at the top gives the report for all properties, one location or one property, with tax numbers, last paid date, amount and whether the property is Own or Rent. Save your bank accounts and GPay once with the Payment Accounts button, then choose them in each property (a bank account, a GPay, or both; at least one). Changing an account there updates every property. The choice shows in the property view and prints in the agreement. Properties marked Own Occupation do not need it.'},
+  {icon:'🏢',title:'Property',text:'Manage your properties. Press + Add Property to enter the property details and tax numbers. Open a property to record tax or account payments (+ Add Payment), add Maintenance expenses, press Property Report to see its report on screen (the PDF button at the top right saves it), edit it, or Mark as Sold. A sold property shows Reports with Property Details and Sold Details. The Property Reports button at the top gives the report for all properties, one location or one property, with tax numbers, last paid date, amount and whether the property is Own or Rent. Save your bank accounts and GPay once with the Owner Bank Details button, then choose them in each property (a bank account, a GPay, or both; at least one). Changing an account there updates every property. The choice shows in the property view and prints in the agreement. Properties marked Own Occupation do not need it.'},
   {icon:'📄',title:'Agreement (optional)',text:'Open a tenant and press Agreement. Tamil or English opens the rental agreement on screen (the PDF button at the top right saves it), filled with the tenant details: property address, name, address, ID proof, mobile numbers, rent, advance, start date (the advance date) and the materials given as other items. The payment details of the property (account holder name with the bank details or GPay that were entered) print under the clauses as Rent Payment Details. Space is left free below for anything to write by hand. To extend the agreement for a further 11 months, choose Extend – Tamil or Extend – English: the box shows the new dates (the first extension starts right after the 11 months end), and Confirm & Open saves the extension and opens one page to print and sign. In the same box you can change the monthly rent for the extended period and add an additional advance: the new rent becomes the rent of the tenant from then on (rent rows already added are not changed), and the additional advance is added to the total advance, which is what the Vacate screen starts with. The first agreement always prints the original rent and advance. The app remembers how many extensions were made for the tenant, so the next one continues from the last date. Use Reprint last to print the same page again, or Undo last extension if you confirmed by mistake. After signing, scan all the pages together as one PDF and use Replace Signed Copy (or Upload Signed Copy the first time), so one file holds the original and the extensions. Signed Copy opens it. The PDF must be under 1 MB. Agreement is optional, and uploaded files are included in Backup.'},
   {icon:'💾',title:'Backup / Restore',text:'Keep your data safe. Download Backup saves a file on your phone, and Restore from File brings it back. Sign in with Google to back up to your own Google Drive. On a new phone, sign in with the same Google account and press Restore from Google Drive. Reset All Data erases everything, so use it carefully.'}
 ];
@@ -3135,6 +3147,43 @@ function firstRunStartFresh(){
 payMigrate();
 renderRentList();
 renderPropList();
+/* ===================== DATE VALIDATION MODULE (isolated - one shared check for every date field, now and future) =====================
+   Rule: DD-MM-YYYY, a real calendar date, year 2000-2100. 5/11/2026 or 5.11.2026 is tidied to 05-11-2026.
+   Use dvParse(text,{required,noFuture}) for a value, dvCheckAll([[fieldId,'Label',{opts}],...]) before saving a form.
+   To cover a new date field later: add it to the dvCheckAll list in that form's save function. */
+function dvTodayStart(){ const t=new Date(); t.setHours(0,0,0,0); return t; }
+function dvParse(text,opts){
+  opts=opts||{};
+  const raw=String(text==null?'':text).trim();
+  if(!raw) return opts.required ? {ok:false,msg:'date is required'} : {ok:true,value:''};
+  const m=raw.replace(/[\/.\s]+/g,'-').match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if(!m) return {ok:false,msg:'enter the date as DD-MM-YYYY, like 05-11-2026'};
+  const d=+m[1], mo=+m[2], y=+m[3];
+  if(y<2000||y>2100) return {ok:false,msg:'year must be between 2000 and 2100'};
+  const dt=new Date(y,mo-1,d);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d) return {ok:false,msg:'this date does not exist in the calendar'};
+  if(opts.noFuture && dt>dvTodayStart()) return {ok:false,msg:'a future date is not allowed'};
+  return {ok:true,value:String(d).padStart(2,'0')+'-'+String(mo).padStart(2,'0')+'-'+y};
+}
+function dvCheckField(id,label,opts){
+  const el=document.getElementById(id); if(!el) return true;
+  const v=dvParse(el.value,opts);
+  if(!v.ok){ toast(label+': '+v.msg, true); try{ el.focus(); }catch(e){} return false; }
+  el.value=v.value; return true;
+}
+function dvCheckAll(list){
+  for(const it of list){ if(!dvCheckField(it[0],it[1],it[2])) return false; }
+  return true;
+}
+/* picking from the calendar in a ledger cell must save like a typed change */
+function dvFireChange(id){ const el=document.getElementById(id); if(el) el.dispatchEvent(new Event('change')); }
+/* tidy + warn straight away when a date box is left (the save-time check still runs) */
+['expenseDate','taxPayDate','soldDate','rentAdvDate','rentDueDate','vacateDate'].forEach(function(id){
+  const el=document.getElementById(id); if(!el) return;
+  el.addEventListener('change',function(){ const v=dvParse(el.value,{}); if(v.ok) el.value=v.value; else toast(v.msg.charAt(0).toUpperCase()+v.msg.slice(1), true); });
+});
+/* ===================== END DATE VALIDATION MODULE ===================== */
+
 driveInit();
 firstRunCheck();
 
