@@ -1471,6 +1471,7 @@ function getTenantStatus(r){
   const last=r.ledger[r.ledger.length-1];
   const dd=dmyToDate(last.dueDate);
   const today=new Date(); today.setHours(0,0,0,0);
+  if(dd && dd > today) return {total:0, status:'nodue', label:'No Due', badgeClass:'advance'};   // due date not reached yet
   if(dd && dd < today) return {total:bal, status:'overdue', label:`Overdue ₹${bal.toLocaleString('en-IN')}`, badgeClass:'overdue'};
   return {total:bal, status:'due', label:`Due ₹${bal.toLocaleString('en-IN')}`, badgeClass:'amber'};
 }
@@ -3136,6 +3137,73 @@ renderRentList();
 renderPropList();
 driveInit();
 firstRunCheck();
+
+/* ===================== AUTO MONTHLY RENT DUE MODULE (isolated - reads/writes only tenant ledger rows) =====================
+   Adds a new ledger row on each monthly due date (day taken from the tenant's Rent Due Date).
+   New row = unpaid balance carried forward + monthly rent (same as "Add next month").
+   Paid in full => No Due. Balance left => Due / Overdue. Runs on app open and when the app comes back to the screen. */
+function arDaysIn(y,m){ return new Date(y,m+1,0).getDate(); }
+function arDueOn(y,m,day){ return new Date(y,m,Math.min(day,arDaysIn(y,m))); }
+function arFmt(d){ return String(d.getDate()).padStart(2,'0')+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+d.getFullYear(); }
+function arRowCycle(row){
+  /* month cycle this ledger row already covers (year*12+month) */
+  const dd=dmyToDate(row.dueDate);
+  let idx = dd ? dd.getFullYear()*12+dd.getMonth() : -1;
+  if(!row.auto){
+    /* manual rows may carry an old due date - also count the month they were created in */
+    const ts=Number(String(row.id||'').slice(2,15));
+    if(ts>1e12){ const c=new Date(ts); idx=Math.max(idx, c.getFullYear()*12+c.getMonth()); }
+  }
+  return idx;
+}
+function arNewRow(amount,dueDate){
+  return {id:uid(), dueDate:arFmt(dueDate), amount:amount.toFixed(2), paidAmount:0, paidDate:'', paymentType:'Cash', note:'', auto:true};
+}
+function autoRentRows(now){
+  const today=now?new Date(now):new Date(); today.setHours(0,0,0,0);
+  let rents; try{ rents=loadRents(); }catch(e){ return 0; }
+  let added=0, tenants=0;
+  rents.forEach(r=>{
+    if(r.status!=='Active') return;
+    const rent=parseFloat(r.monthlyRent)||0;
+    const anchor=dmyToDate(r.dueDate);
+    if(!rent || !anchor) return;
+    const day=anchor.getDate();
+    r.ledger=r.ledger||[];
+    let n=0;
+    if(!r.ledger.length){
+      /* tenant has no ledger yet: first row = Rent Due Date if still ahead, else the current monthly cycle */
+      let first=anchor;
+      if(anchor<=today){
+        first=arDueOn(today.getFullYear(),today.getMonth(),day);
+        if(first>today) first=arDueOn(today.getFullYear(),today.getMonth()-1,day);
+      }
+      r.ledger.push(arNewRow(rent,first)); n++;
+    }
+    let guard=0;
+    while(guard++<36){
+      const last=r.ledger[r.ledger.length-1];
+      const next=arRowCycle(last)+1;
+      if(next<=0) break;
+      const due=arDueOn(Math.floor(next/12),next%12,day);
+      if(due>today) break;
+      const bal=(parseFloat(last.amount)||0)-(parseFloat(last.paidAmount)||0);
+      r.ledger.push(arNewRow(bal+rent,due)); n++;
+    }
+    if(n){ added+=n; tenants++; }
+  });
+  if(added){
+    if(!saveRents(rents)) return 0;
+    try{ renderRentList(); }catch(e){}
+    try{ if(currentRentId && document.getElementById('rentViewBg') && document.getElementById('rentViewBg').classList.contains('show')) renderRentViewBody(); }catch(e){}
+    try{ toast('Monthly rent due added for '+tenants+' tenant'+(tenants>1?'s':'')); }catch(e){}
+  }
+  return added;
+}
+autoRentRows();
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) autoRentRows(); });
+/* ===================== END AUTO MONTHLY RENT DUE MODULE ===================== */
+
 </script>
 </body>
 </html>
