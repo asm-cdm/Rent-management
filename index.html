@@ -1348,6 +1348,17 @@ function rentPropGuardFail(){
       document.getElementById('rentPropInfo').innerHTML='';
     }
   });
+  // cursor leaving Property (Next arrow / tap on another field) without a valid selection -> bring it back
+  el.addEventListener('blur',()=>{
+    setTimeout(()=>{
+      if(document.getElementById('rentPropId').value) return;
+      if(!document.getElementById('rentModalBg').classList.contains('show')) return;
+      const a=document.activeElement;
+      if(a && a!==el && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('#rentModalBg')){
+        rentPropGuardFail();
+      }
+    },120);
+  });
   el.addEventListener('keydown',(e)=>{
     if(e.key==='Enter'){
       e.preventDefault();
