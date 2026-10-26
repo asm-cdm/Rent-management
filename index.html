@@ -124,7 +124,7 @@ table.led input,table.led select{width:100%;padding:5px 6px;border:1px solid var
 .filebox{border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center;font-size:13px;color:var(--sub);cursor:pointer}
 .filethumbs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .filethumbs .f{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:6px;background:#fafaf8}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--brand-dk);color:#fff;padding:11px 20px;border-radius:30px;font-size:13.5px;z-index:99;opacity:0;transition:opacity .25s;max-width:90%;text-align:center}
+.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.25);background:var(--brand-dk);color:#fff;padding:11px 20px;border-radius:30px;font-size:13.5px;opacity:0;transition:opacity .25s;max-width:90%;text-align:center}
 .toast.show{opacity:1}
 .toast.error{background:var(--red)}
 footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
@@ -152,7 +152,6 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;borde
 nav.tabs button{flex:1;max-width:340px;padding:9px 4px 8px;font-size:12px;color:#64748b;border-bottom:none;border-top:3px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav.tabs button .ic{font-size:19px;line-height:1}
 nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
-.toast{bottom:96px}
 /* toolbar: search on its own row, buttons in one clean row below */
 .toolbar{gap:8px}
 .toolbar input[type=text]{flex:1 1 100%;min-width:0}
@@ -640,7 +639,7 @@ function uid(){return 'id'+Date.now()+Math.floor(Math.random()*10000)}
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function jsq(s){ return esc(JSON.stringify(String(s==null?'':s))); }
 
-function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.classList.toggle('error',!!isError);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?4500:2200)}
+function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.classList.toggle('error',!!isError);t.classList.add('show');clearTimeout(window._toastT);window._toastT=setTimeout(()=>t.classList.remove('show'),2000)}
 function openTenantFile(rentId, idx){
   const r=loadRents().find(x=>x.id===rentId);
   const f=r && r.files && r.files[idx];
@@ -1321,6 +1320,48 @@ function selectRentProp(id){
   editRentMaterials=[]; renderRentMaterialsChips();
   populateRentMatSelect();
 }
+
+/* ===== Tenant form: Property selection guard (isolated module) ===== */
+function rentPropMsg(){
+  const editingId=document.getElementById('rentId').value;
+  const occ=new Set(loadRents().filter(r=>r.status==='Active' && r.id!==editingId).map(r=>r.propertyId));
+  const vacant=loadProps().filter(p=>p.status!=='Sold' && !p.ownOccupation && !occ.has(p.id));
+  if(!loadProps().length) return 'No property added. Add a property first';
+  if(!vacant.length) return 'No vacant property';
+  return 'No property selected';
+}
+function rentPropGuardFail(){
+  const el=document.getElementById('rentPropSearch');
+  toast(rentPropMsg(),true);
+  filterPropOpts();
+  el.focus();
+}
+(function initRentPropGuard(){
+  const el=document.getElementById('rentPropSearch');
+  if(!el) return;
+  // typing after a selection invalidates it - must pick from list again
+  el.addEventListener('input',()=>{
+    const cur=selectedRentProp;
+    if(!cur || el.value!==cur.name){
+      document.getElementById('rentPropId').value='';
+      selectedRentProp=null;
+      document.getElementById('rentPropInfo').innerHTML='';
+    }
+  });
+  el.addEventListener('keydown',(e)=>{
+    if(e.key==='Enter'){
+      e.preventDefault();
+      if(document.getElementById('rentPropId').value) return;
+      const opts=document.querySelectorAll('#rentPropOpts .opt:not(.sub)');
+      if(opts.length===1){ opts[0].click(); } else { rentPropGuardFail(); }
+    } else if(e.key==='Tab' && !e.shiftKey){
+      if(!document.getElementById('rentPropId').value){
+        e.preventDefault();
+        rentPropGuardFail();
+      }
+    }
+  });
+})();
 function showRentPropInfo(p){
   if(!p){document.getElementById('rentPropInfo').innerHTML='';return;}
   document.getElementById('rentPropInfo').innerHTML=`EB Number: <b>${esc(p.ebNumber||'-')}</b> &nbsp;|&nbsp; Address: ${esc(p.address)}`;
@@ -1389,6 +1430,7 @@ function renderRentFileThumbs(){
   ).join('');
 }
 function saveRent(){
+  if(!document.getElementById('rentPropId').value){ rentPropGuardFail(); return; }
   if(!dvCheckAll([['rentAdvDate','Advance Date'],['rentDueDate','Rent Due Date',{required:true}]])) return;
   const propId=document.getElementById('rentPropId').value;
   const tenantName=document.getElementById('rentTenantName').value.trim();
