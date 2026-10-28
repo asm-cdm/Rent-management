@@ -124,7 +124,7 @@ table.led input,table.led select{width:100%;padding:5px 6px;border:1px solid var
 .filebox{border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center;font-size:13px;color:var(--sub);cursor:pointer}
 .filethumbs{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .filethumbs .f{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;display:flex;align-items:center;gap:6px;background:#fafaf8}
-.toast{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.25);background:var(--brand-dk);color:#fff;padding:11px 20px;border-radius:30px;font-size:13.5px;opacity:0;transition:opacity .25s;max-width:90%;text-align:center}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--brand-dk);color:#fff;padding:11px 20px;border-radius:30px;font-size:13.5px;z-index:99;opacity:0;transition:opacity .25s;max-width:90%;text-align:center}
 .toast.show{opacity:1}
 .toast.error{background:var(--red)}
 footer{text-align:center;color:var(--sub);font-size:12px;padding:20px 10px 30px}
@@ -152,6 +152,7 @@ nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;borde
 nav.tabs button{flex:1;max-width:340px;padding:9px 4px 8px;font-size:12px;color:#64748b;border-bottom:none;border-top:3px solid transparent;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav.tabs button .ic{font-size:19px;line-height:1}
 nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
+.toast{bottom:96px}
 /* toolbar: search on its own row, buttons in one clean row below */
 .toolbar{gap:8px}
 .toolbar input[type=text]{flex:1 1 100%;min-width:0}
@@ -322,8 +323,15 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
       <div class="opts" id="reportScopePropOpts"></div>
     </div>
   </div>
-  <div class="modal-actions" style="justify-content:space-between">
-    <button class="btn secondary" id="reportScopeVacateHistoryBtn" onclick="generateScopedVacateHistory()" style="display:none">Vacate History</button>
+  <div id="reportScopeDatesWrap" style="display:none">
+    <div class="field"><label>From Date <span class="sub">(Income &amp; Expense Report only)</span></label><div class="daterow"><input type="text" id="rpFromDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rpFromDate', event)">📅</div></div></div>
+    <div class="field"><label>To Date <span class="sub">(blank = all dates)</span></label><div class="daterow"><input type="text" id="rpToDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rpToDate', event)">📅</div></div></div>
+  </div>
+  <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn secondary" id="reportScopeVacateHistoryBtn" onclick="generateScopedVacateHistory()" style="display:none">Vacate History</button>
+      <button class="btn secondary" id="reportScopeStatementBtn" onclick="generatePropertyStatement()" style="display:none">Income &amp; Expense Report</button>
+    </div>
     <div style="display:flex;gap:8px;margin-left:auto">
       <button class="btn secondary" onclick="closeModal('reportScopeBg')">Cancel</button>
       <button class="btn" onclick="generateScopedReport()">Generate PDF</button>
@@ -639,7 +647,7 @@ function uid(){return 'id'+Date.now()+Math.floor(Math.random()*10000)}
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function jsq(s){ return esc(JSON.stringify(String(s==null?'':s))); }
 
-function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.classList.toggle('error',!!isError);t.classList.add('show');clearTimeout(window._toastT);window._toastT=setTimeout(()=>t.classList.remove('show'),2000)}
+function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.classList.toggle('error',!!isError);t.classList.add('show');setTimeout(()=>t.classList.remove('show'),isError?4500:2200)}
 function openTenantFile(rentId, idx){
   const r=loadRents().find(x=>x.id===rentId);
   const f=r && r.files && r.files[idx];
@@ -1320,59 +1328,6 @@ function selectRentProp(id){
   editRentMaterials=[]; renderRentMaterialsChips();
   populateRentMatSelect();
 }
-
-/* ===== Tenant form: Property selection guard (isolated module) ===== */
-function rentPropMsg(){
-  const editingId=document.getElementById('rentId').value;
-  const occ=new Set(loadRents().filter(r=>r.status==='Active' && r.id!==editingId).map(r=>r.propertyId));
-  const vacant=loadProps().filter(p=>p.status!=='Sold' && !p.ownOccupation && !occ.has(p.id));
-  if(!loadProps().length) return 'No property added. Add a property first';
-  if(!vacant.length) return 'No vacant property';
-  return 'No property selected';
-}
-function rentPropGuardFail(){
-  const el=document.getElementById('rentPropSearch');
-  toast(rentPropMsg(),true);
-  filterPropOpts();
-  el.focus();
-}
-(function initRentPropGuard(){
-  const el=document.getElementById('rentPropSearch');
-  if(!el) return;
-  // typing after a selection invalidates it - must pick from list again
-  el.addEventListener('input',()=>{
-    const cur=selectedRentProp;
-    if(!cur || el.value!==cur.name){
-      document.getElementById('rentPropId').value='';
-      selectedRentProp=null;
-      document.getElementById('rentPropInfo').innerHTML='';
-    }
-  });
-  // cursor leaving Property (Next arrow / tap on another field) without a valid selection -> bring it back
-  el.addEventListener('blur',()=>{
-    setTimeout(()=>{
-      if(document.getElementById('rentPropId').value) return;
-      if(!document.getElementById('rentModalBg').classList.contains('show')) return;
-      const a=document.activeElement;
-      if(a && a!==el && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.closest('#rentModalBg')){
-        rentPropGuardFail();
-      }
-    },120);
-  });
-  el.addEventListener('keydown',(e)=>{
-    if(e.key==='Enter'){
-      e.preventDefault();
-      if(document.getElementById('rentPropId').value) return;
-      const opts=document.querySelectorAll('#rentPropOpts .opt:not(.sub)');
-      if(opts.length===1){ opts[0].click(); } else { rentPropGuardFail(); }
-    } else if(e.key==='Tab' && !e.shiftKey){
-      if(!document.getElementById('rentPropId').value){
-        e.preventDefault();
-        rentPropGuardFail();
-      }
-    }
-  });
-})();
 function showRentPropInfo(p){
   if(!p){document.getElementById('rentPropInfo').innerHTML='';return;}
   document.getElementById('rentPropInfo').innerHTML=`EB Number: <b>${esc(p.ebNumber||'-')}</b> &nbsp;|&nbsp; Address: ${esc(p.address)}`;
@@ -1441,7 +1396,6 @@ function renderRentFileThumbs(){
   ).join('');
 }
 function saveRent(){
-  if(!document.getElementById('rentPropId').value){ rentPropGuardFail(); return; }
   if(!dvCheckAll([['rentAdvDate','Advance Date'],['rentDueDate','Rent Due Date',{required:true}]])) return;
   const propId=document.getElementById('rentPropId').value;
   const tenantName=document.getElementById('rentTenantName').value.trim();
@@ -2671,6 +2625,7 @@ function openReportScope(target){
   document.getElementById('reportScopePropSearch').value='';
   document.getElementById('reportScopePropVal').value='';
   toggleReportScopeMode();
+  rpScopeSetup(target);
   openModalEl('reportScopeBg');
 }
 function toggleReportScopeMode(){
@@ -2788,6 +2743,162 @@ function generateScopedReport(){
     : buildConsolidatedPropertyPdf(scopeIds, scopeLabel);
   pdfShow(doc, filename);
 }
+
+/* ===================== PROPERTY INCOME & EXPENSE REPORT MODULE (isolated - reads only; own From/To dates) =====================
+   One block per property: Name, Own/Rent, then rows (Rent Income = blue, Expenses = red, Tax = red), then Net Amount.
+   Rent Income counts only rent actually PAID (ledger Paid Amount). Due / balance / advance are not counted.
+   From/To dates filter by Paid Date (Expenses and Tax use their entry date). Boxes are cleared after every report. */
+const RP_BLUE=[0,70,200], RP_RED=[200,0,0];
+function rpResetDates(){ ['rpFromDate','rpToDate'].forEach(function(id){ const el=document.getElementById(id); if(el) el.value=''; }); }
+function rpScopeSetup(target){
+  rpResetDates();
+  const on=(target==='property');
+  document.getElementById('reportScopeDatesWrap').style.display = on?'':'none';
+  document.getElementById('reportScopeStatementBtn').style.display = on?'':'none';
+}
+['rpFromDate','rpToDate'].forEach(function(id){
+  const el=document.getElementById(id); if(!el) return;
+  el.addEventListener('change',function(){ const v=dvParse(el.value,{}); if(v.ok) el.value=v.value; else toast(v.msg.charAt(0).toUpperCase()+v.msg.slice(1), true); });
+});
+function rpMoney(n){ return (n<0?'-':'')+'Rs.'+Math.abs(n).toFixed(2); }
+function rpTime(s){ const d=dmyToDate(s); return d?d.getTime():0; }
+function rpInRange(dmy,from,to){
+  if(!from && !to) return true;
+  const d=dmyToDate(dmy); if(!d) return false;
+  if(from && d<from) return false;
+  if(to && d>to) return false;
+  return true;
+}
+function rpResolveScope(){
+  const mode=document.getElementById('reportScopeMode').value;
+  const props=loadProps();
+  if(mode==='location'){
+    const loc=document.getElementById('reportScopeLocationVal').value.trim() || document.getElementById('reportScopeLocationSearch').value.trim();
+    if(!loc){ toast('Select a location'); return null; }
+    return {scopeIds:props.filter(p=>(p.location||'').trim().toLowerCase()===loc.toLowerCase()).map(p=>p.id), scopeLabel:loc};
+  }
+  if(mode==='property'){
+    let pid=document.getElementById('reportScopePropVal').value.trim();
+    if(!pid){
+      const typed=document.getElementById('reportScopePropSearch').value.trim();
+      if(typed){ const m=props.find(x=>x.name.trim().toLowerCase()===typed.toLowerCase()); if(m) pid=m.id; }
+    }
+    if(!pid){ toast('Select a property'); return null; }
+    const p=props.find(x=>x.id===pid);
+    if(!p){ toast('Property not found'); return null; }
+    return {scopeIds:[p.id], scopeLabel:p.name};
+  }
+  return {scopeIds:null, scopeLabel:null};
+}
+function rpCollect(p,rents,from,to){
+  const out={income:[],expense:[],tax:[]};
+  rents.filter(r=>r.propertyId===p.id).forEach(function(r){
+    (r.ledger||[]).forEach(function(row){
+      const paid=parseFloat(row.paidAmount)||0;
+      if(paid<=0 || !String(row.paidDate||'').trim()) return;
+      if(!rpInRange(row.paidDate,from,to)) return;
+      out.income.push({date:row.dueDate||'-', num:r.tenantName||'-', paidDate:row.paidDate, amt:paid});
+    });
+  });
+  (p.expenses||[]).forEach(function(e){
+    if(!rpInRange(e.date,from,to)) return;
+    out.expense.push({date:e.date||'-', num:e.type||'-', paidDate:e.date||'-', amt:parseFloat(e.amount)||0});
+  });
+  const merged=getMergedTaxNumbers(p);
+  (p.taxPayments||[]).forEach(function(t){
+    if(!rpInRange(t.date,from,to)) return;
+    const m=merged.find(z=>z.type===t.type);
+    const acct=(m&&m.number)||(t.refNo&&t.refNo!=='-'?t.refNo:'')||'';
+    out.tax.push({date:t.date||'-', num:((t.type||'Tax')+(acct?' '+acct:'')).trim(), paidDate:t.date||'-', amt:parseFloat(t.amount)||0});
+  });
+  ['income','expense','tax'].forEach(k=>out[k].sort((a,b)=>rpTime(a.paidDate)-rpTime(b.paidDate)));
+  return out;
+}
+function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
+  let props=loadProps().filter(p=>p.status!=='Sold').sort((a,b)=>a.name.localeCompare(b.name));
+  if(Array.isArray(scopeIds)) props=props.filter(p=>scopeIds.includes(p.id));
+  const rents=loadRents();
+  const doc=new jspdf.jsPDF();
+  const pageTitle='Income & Expense Report'+(scopeLabel?' — '+scopeLabel:'');
+  const period = (fromTxt&&toTxt) ? 'Period: '+fromTxt+' to '+toTxt : fromTxt ? 'Period: from '+fromTxt : toTxt ? 'Period: up to '+toTxt : 'Period: All dates';
+  const x=14, cw=[26,30,56,28,42], totalW=182, rowH=7, fs=8.5;
+  const limit=()=>doc.internal.pageSize.getHeight()-26;
+  let y=0;
+  function startPage(first){
+    if(!first){ doc.addPage(); pdfHeader(doc,pageTitle); }
+    doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
+    doc.text(period,14,27); doc.setTextColor(0,0,0);
+    y=33;
+  }
+  function head(){
+    doc.setFillColor(231,239,232); doc.rect(x,y,totalW,rowH,'F');
+    doc.setFont(undefined,'bold'); doc.setFontSize(fs); doc.setTextColor(30,58,138);
+    const H=['Date','Type','Number','Paid Date','Amount']; let cx=x;
+    H.forEach(function(h,i){ if(i===4) doc.text(h,x+totalW-2,y+rowH-2.3,{align:'right'}); else doc.text(h,cx+2,y+rowH-2.3); cx+=cw[i]; });
+    doc.setFont(undefined,'normal'); doc.setTextColor(0,0,0);
+    y+=rowH;
+  }
+  function row(cells,color){
+    if(y+rowH>limit()){ startPage(false); head(); }
+    doc.setFont(undefined,'normal'); doc.setFontSize(fs);
+    let cx=x;
+    cells.forEach(function(t,i){
+      if(color && (i===1||i===4)) doc.setTextColor(color[0],color[1],color[2]); else doc.setTextColor(0,0,0);
+      if(i===4) doc.text(String(t),x+totalW-2,y+rowH-2.3,{align:'right'});
+      else doc.text(fitText(doc,t,cw[i]-3),cx+2,y+rowH-2.3);
+      cx+=cw[i];
+    });
+    doc.setTextColor(0,0,0); doc.setDrawColor(220,220,210); doc.line(x,y+rowH,x+totalW,y+rowH);
+    y+=rowH;
+  }
+  pdfHeader(doc,pageTitle); startPage(true);
+  props.forEach(function(p){
+    const c=rpCollect(p,rents,from,to);
+    if(y+34>limit()) startPage(false);
+    doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
+    doc.text(fitText(doc,p.name,totalW),x,y+4);
+    doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
+    doc.text(p.ownOccupation?'Own':'Rent',x,y+9); doc.setTextColor(0,0,0);
+    y+=12; head();
+    const sections=[['Rent Income',c.income,RP_BLUE,1],['Expenses',c.expense,RP_RED,-1],['Tax',c.tax,RP_RED,-1]];
+    let net=0, count=0;
+    sections.forEach(function(sec){
+      sec[1].forEach(function(e){
+        row([e.date,sec[0],e.num,e.paidDate,rpMoney(e.amt)],sec[2]);
+        net+=sec[3]*e.amt; count++;
+      });
+    });
+    if(!count) row(['-','No entries','-','-','-'],null);
+    if(y+rowH+2>limit()){ startPage(false); }
+    y+=1;
+    doc.setDrawColor(150,150,140); doc.line(x,y,x+totalW,y);
+    doc.setFont(undefined,'bold'); doc.setFontSize(9.5);
+    const col=net<0?RP_RED:RP_BLUE; doc.setTextColor(col[0],col[1],col[2]);
+    doc.text('Net Amount',x+2,y+rowH-2);
+    doc.text(rpMoney(net),x+totalW-2,y+rowH-2,{align:'right'});
+    doc.setTextColor(0,0,0); doc.setFont(undefined,'normal');
+    y+=rowH+9;
+  });
+  if(!props.length){ doc.setFontSize(10); doc.text('No properties in this scope',x,y+4); }
+  const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); pdfFooter(doc); }
+  return {doc, filename:'Income_Expense_Report_'+pdfScopeTag(scopeLabel)+'_'+todayDMYFile()+'.pdf'};
+}
+function generatePropertyStatement(){
+  if(reportScopeTarget!=='property') return;
+  if(!dvCheckAll([['rpFromDate','From Date'],['rpToDate','To Date']])) return;
+  const fromTxt=document.getElementById('rpFromDate').value.trim(), toTxt=document.getElementById('rpToDate').value.trim();
+  const from=dmyToDate(fromTxt), to=dmyToDate(toTxt);
+  if(from && to && from>to){ toast('From Date cannot be after To Date', true); return; }
+  const sc=rpResolveScope(); if(!sc) return;
+  let r;
+  try{ r=buildPropertyStatementPdf(sc.scopeIds,sc.scopeLabel,from,to,fromTxt,toTxt); }
+  catch(err){ toast('Report problem: '+((err&&err.message)?err.message:err), true); return; }
+  rpResetDates();
+  closeModal('reportScopeBg');
+  try{ pdfShow(r.doc,r.filename); }
+  catch(err){ toast('Could not open the report: '+((err&&err.message)?err.message:err), true); }
+}
+/* ===================== END PROPERTY INCOME & EXPENSE REPORT MODULE ===================== */
 
 /* ===================== BACKUP / RESTORE ===================== */
 function doBackup(){
