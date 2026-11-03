@@ -71,6 +71,10 @@ main{padding:16px;max-width:1100px;margin:0 auto}
 #confirmBg{z-index:90}
 .modal-bg.show{display:flex}
 .modal{background:#fff;border-radius:12px;width:100%;max-width:640px;padding:20px 22px;margin-bottom:40px}
+.modal-bg>.modal{margin:auto!important}
+.sec-item{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;display:flex;gap:8px;align-items:center}
+.sec-item .sec-main{flex:1;min-width:0;font-size:13px;word-break:break-word}
+.sec-item .sec-main b{display:block;font-size:14px}
 .modal h2{margin:0 0 14px;font-size:17px;color:var(--brand-dk)}
 .modal h3{font-size:14px;color:var(--brand-dk);margin:18px 0 8px;border-top:1px solid var(--line);padding-top:14px}
 .field{margin-bottom:12px}
@@ -83,26 +87,29 @@ main{padding:16px;max-width:1100px;margin:0 auto}
 @media(max-width:520px){.grid2,.grid3{grid-template-columns:1fr}}
 .daterow{display:flex;gap:6px;position:relative}
 .daterow input[type=text]{flex:1}
-.dp-popup{position:absolute;z-index:70;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.22);padding:7px;width:205px;display:none}
+.dp-backdrop{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:69;display:none}
+.dp-backdrop.show{display:block}
+.dp-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:70;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.35);padding:14px;width:min(92vw,340px);display:none}
+.dp-popup.show{display:block}
+.dp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.dp-head button{background:var(--brand-lt);border:none;font-size:26px;line-height:1;cursor:pointer;color:var(--brand-dk);width:48px;height:44px;border-radius:10px;font-weight:700}
+.dp-head button:active{background:var(--brand);color:#fff}
+.dp-head .lbl{font-weight:700;font-size:17px}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.dp-grid .dow{font-size:12px;color:var(--sub);padding:4px 0;font-weight:700}
+.dp-grid .day{padding:0;height:40px;line-height:40px;border-radius:8px;cursor:pointer;font-size:16px}
+.dp-grid .day:hover{background:var(--brand-lt)}
+.dp-grid .day.today{border:2px solid var(--brand)}
+.dp-grid .day.sel{background:var(--brand);color:#fff;font-weight:700}
+.dp-grid .blank{visibility:hidden}
+.dp-foot{display:flex;justify-content:space-between;margin-top:10px;border-top:1px solid var(--line);padding-top:8px}
+.dp-foot button{font-size:15px;background:none;border:none;color:var(--brand-dk);cursor:pointer;font-weight:700;padding:10px 14px;border-radius:8px}
+.dp-foot button:active{background:var(--brand-lt)}
 .menu-popup{position:absolute;z-index:70;background:#fff;border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(0,0,0,.22);display:none;overflow:hidden;min-width:170px}
 .menu-popup.show{display:block}
 .menu-popup .mi{padding:11px 15px;font-size:13.5px;cursor:pointer;color:var(--ink)}
 .menu-popup .mi:hover{background:var(--brand-lt)}
 .menu-popup .mi+.mi{border-top:1px solid var(--line)}
-.dp-popup.show{display:block}
-.dp-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
-.dp-head button{background:none;border:none;font-size:14px;cursor:pointer;color:var(--brand-dk);padding:1px 7px;border-radius:5px}
-.dp-head button:hover{background:var(--brand-lt)}
-.dp-head .lbl{font-weight:700;font-size:11.5px}
-.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center}
-.dp-grid .dow{font-size:9px;color:var(--sub);padding:2px 0;font-weight:600}
-.dp-grid .day{padding:4px 0;border-radius:5px;cursor:pointer;font-size:11px}
-.dp-grid .day:hover{background:var(--brand-lt)}
-.dp-grid .day.today{border:1px solid var(--brand)}
-.dp-grid .day.sel{background:var(--brand);color:#fff}
-.dp-grid .blank{visibility:hidden}
-.dp-foot{display:flex;justify-content:space-between;margin-top:5px;border-top:1px solid var(--line);padding-top:5px}
-.dp-foot button{font-size:10.5px;background:none;border:none;color:var(--brand-dk);cursor:pointer;font-weight:600}
 .daterow .cal{width:38px;height:38px;border:1px solid var(--line);border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px}
 .modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;border-top:1px solid var(--line);padding-top:14px}
 .searchsel{position:relative}
@@ -260,6 +267,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
 </main>
 <footer>Powered by A.S.M Consultancy Service · Chidambaram</footer>
 <div class="toast" id="toast"></div>
+<div class="dp-backdrop" id="dpBackdrop"></div>
 <div class="dp-popup" id="dpPopup"></div>
 <div class="menu-popup" id="menuPopup"></div>
 
@@ -378,28 +386,57 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
     <label>EB Number</label><input type="text" id="propEB">
   </div>
 
-  <h3>Tax / Account Numbers</h3>
-  <div class="chiplist" id="propTaxNumChips"></div>
-  <div class="addrow-inline">
-    <div class="searchsel" style="flex:1;min-width:0"><input type="text" id="propTaxNumTypeSearch" placeholder="Type..." oninput="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')" onfocus="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')">
-      <input type="hidden" id="propTaxNumType">
-      <div class="opts" id="propTaxNumTypeOpts"></div>
-    </div>
-    <input type="text" id="propTaxNumValue" placeholder="Number" style="flex:1;min-width:0">
-    <button class="btn small" onclick="addPropTaxNumber()">Add</button>
+  <h3>Tax / Account Numbers &amp; Materials</h3>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button type="button" class="btn secondary" id="propTaxNumOpenBtn" onclick="taxNumOpen()">Tax / Account Numbers (0)</button>
+    <button type="button" class="btn secondary" id="propMatOpenBtn" onclick="matOpen()">Property Materials (0)</button>
   </div>
   <p class="sub" id="propLinkedNote" style="display:none">Any Type not listed above is automatically inherited from the Main property's own list. Add a Type here only when this portion needs its own separate number for it.</p>
-
-  <h3>Property Materials (fixed fittings)</h3>
-  <div class="chiplist" id="propMaterialsChips"></div>
-  <div class="addrow-inline">
-    <input type="text" id="propMaterialInput" placeholder="e.g. Key, Tube Light, A/C, Motor" style="flex:1">
-    <button class="btn small" onclick="addPropertyMaterial()">Add</button>
-  </div>
 
   <div class="modal-actions">
     <button class="btn secondary" onclick="closeModal('propModalBg')">Cancel</button>
     <button class="btn" onclick="saveProperty()">Save Property</button>
+  </div>
+</div></div>
+
+<!-- ============ TAX / ACCOUNT NUMBERS POPUP (opened from Property form) ============ -->
+<div class="modal-bg" id="taxNumBg" style="z-index:55"><div class="modal" style="max-width:420px">
+  <h2>Tax / Account Numbers</h2>
+  <div id="taxNumList"></div>
+  <h3 id="taxNumFormTitle">Add Entry</h3>
+  <div class="field"><label>Type</label>
+    <div class="searchsel"><input type="text" id="propTaxNumTypeSearch" placeholder="Type..." oninput="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')" onfocus="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')">
+      <input type="hidden" id="propTaxNumType">
+      <div class="opts" id="propTaxNumTypeOpts"></div>
+    </div>
+  </div>
+  <div class="field"><label>Ward</label><input type="text" id="propTaxNumWard"></div>
+  <div class="field"><label>Old Ass. Number</label><input type="text" id="propTaxNumOld"></div>
+  <div class="field"><label>Ass. Number</label><input type="text" id="propTaxNumValue"></div>
+  <div class="modal-actions" style="justify-content:space-between">
+    <button class="btn secondary" onclick="taxNumClearForm()">Clear</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="taxNumSaveBtn" onclick="taxNumSave()">Add</button>
+      <button class="btn secondary" onclick="taxNumClose()">Close</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ============ PROPERTY MATERIALS POPUP (opened from Property form) ============ -->
+<div class="modal-bg" id="propMatBg" style="z-index:55"><div class="modal" style="max-width:420px">
+  <h2>Property Materials (fixed fittings)</h2>
+  <div id="propMatList"></div>
+  <h3 id="propMatFormTitle">Add Item</h3>
+  <div class="field"><label>Item</label><input type="text" id="propMatName" placeholder="e.g. Key, Tube Light, A/C, Motor"></div>
+  <div class="field"><label>Quantity</label><input type="number" id="propMatQty" min="0" step="any"></div>
+  <div class="field"><label>Place / Room</label><input type="text" id="propMatPlace"></div>
+  <div class="field"><label>Remarks</label><input type="text" id="propMatRemarks"></div>
+  <div class="modal-actions" style="justify-content:space-between">
+    <button class="btn secondary" onclick="matClearForm()">Clear</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn" id="propMatSaveBtn" onclick="matSave()">Add</button>
+      <button class="btn secondary" onclick="matClose()">Close</button>
+    </div>
   </div>
 </div></div>
 
@@ -683,13 +720,8 @@ function openDatePicker(fieldId, evt){
   const existing=dmyToDate(document.getElementById(fieldId).value);
   dpViewDate = existing || new Date();
   renderDatePicker();
-  const popup=document.getElementById('dpPopup');
-  const rect=evt.currentTarget.getBoundingClientRect();
-  let left = window.scrollX + rect.right - 205;
-  if(left < 8) left = window.scrollX + rect.left;
-  popup.style.top = (window.scrollY + rect.bottom + 6) + 'px';
-  popup.style.left = left + 'px';
-  popup.classList.add('show');
+  document.getElementById('dpBackdrop').classList.add('show');
+  document.getElementById('dpPopup').classList.add('show');
 }
 function renderDatePicker(){
   const y=dpViewDate.getFullYear(), m=dpViewDate.getMonth();
@@ -723,7 +755,9 @@ function dpSelect(day){
 }
 function dpToday(){ document.getElementById(dpTargetField).value=todayDMY(); const _t=dpTargetField; closeDatePicker(); if(_t && _t.indexOf('ldg')===0) dvFireChange(_t); }
 function dpClear(){ const _t=dpTargetField; document.getElementById(_t).value=''; closeDatePicker(); if(_t && _t.indexOf('ldg')===0) dvFireChange(_t); }
-function closeDatePicker(){ document.getElementById('dpPopup').classList.remove('show'); dpTargetField=null; }
+function closeDatePicker(){ document.getElementById('dpPopup').classList.remove('show'); document.getElementById('dpBackdrop').classList.remove('show'); dpTargetField=null; }
+/* taps inside the calendar (month arrows re-draw it) must never reach the "tap outside = close" handler */
+document.getElementById('dpPopup').addEventListener('click',function(e){ e.stopPropagation(); });
 
 /* ---- Small action dropdown menu (used by View PDF / Download on Tenant and Property screens) ---- */
 function openMenuPopup(evt, items){
@@ -826,44 +860,120 @@ function openPropertyForm(id){
   renderPropTaxNumChips();
   openModalEl('propModalBg');
 }
-function addPropTaxNumber(){
+/* ===================== PROPERTY POPUPS MODULE (isolated: Tax / Account Numbers + Property Materials) =====================
+   Both work on the Property form's working lists (editPropTaxNumbers / editPropMaterials) - nothing is saved until "Save Property".
+   Tax entry:  {id, type, number (= Ass. Number, used everywhere in PDFs), ward, oldNumber}
+   Material:   {id, name (= Item, also used by Rent "Materials Given"), qty, place, remarks}   */
+let taxNumEditId=null, matEditId=null;
+function propSecCounts(){
+  const a=document.getElementById('propTaxNumOpenBtn'), b=document.getElementById('propMatOpenBtn');
+  if(a) a.textContent='Tax / Account Numbers ('+editPropTaxNumbers.length+')';
+  if(b) b.textContent='Property Materials ('+editPropMaterials.length+')';
+}
+function renderPropTaxNumChips(){ propSecCounts(); }
+function renderPropMaterialsChips(){ propSecCounts(); }
+
+/* ---- Tax / Account Numbers ---- */
+function taxNumOpen(){ taxNumClearForm(); taxNumRender(); openModalEl('taxNumBg'); }
+function taxNumClose(){ closeModal('taxNumBg'); propSecCounts(); }
+function taxNumClearForm(){
+  taxNumEditId=null;
+  ['propTaxNumTypeSearch','propTaxNumType','propTaxNumWard','propTaxNumOld','propTaxNumValue'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('propTaxNumTypeOpts').classList.remove('show');
+  document.getElementById('taxNumFormTitle').textContent='Add Entry';
+  document.getElementById('taxNumSaveBtn').textContent='Add';
+}
+function taxNumRender(){
+  document.getElementById('taxNumList').innerHTML = editPropTaxNumbers.map(function(t){
+    const bits=[]; if(t.ward) bits.push('Ward: '+esc(t.ward)); if(t.oldNumber) bits.push('Old Ass. No: '+esc(t.oldNumber)); bits.push('Ass. No: '+esc(t.number||'-'));
+    return `<div class="sec-item"><div class="sec-main"><b>${esc(t.type)}</b>${bits.join(' &nbsp;|&nbsp; ')}</div>
+      <button class="btn small secondary" onclick="taxNumEdit('${t.id}')">Edit</button>
+      <button class="btn small danger" onclick="taxNumDelete('${t.id}')">Delete</button></div>`;
+  }).join('') || '<div class="sub" style="margin-bottom:8px">None added yet</div>';
+}
+function taxNumEdit(id){
+  const t=editPropTaxNumbers.find(x=>x.id===id); if(!t) return;
+  taxNumEditId=id;
+  document.getElementById('propTaxNumTypeSearch').value=t.type; document.getElementById('propTaxNumType').value=t.type;
+  document.getElementById('propTaxNumWard').value=t.ward||''; document.getElementById('propTaxNumOld').value=t.oldNumber||'';
+  document.getElementById('propTaxNumValue').value=t.number||'';
+  document.getElementById('taxNumFormTitle').textContent='Edit Entry';
+  document.getElementById('taxNumSaveBtn').textContent='Update';
+}
+function taxNumSave(){
   const type=document.getElementById('propTaxNumType').value;
-  const num=document.getElementById('propTaxNumValue').value.trim();
-  if(!type){toast('Select a Type');return;}
-  if(!num){toast('Enter the Number');return;}
-  const existing=editPropTaxNumbers.find(t=>t.type===type);
-  if(existing){ existing.number=num; } else { editPropTaxNumbers.push({id:uid(), type, number:num}); }
-  document.getElementById('propTaxNumTypeSearch').value='';
-  document.getElementById('propTaxNumType').value='';
-  document.getElementById('propTaxNumValue').value='';
-  renderPropTaxNumChips();
+  const ward=document.getElementById('propTaxNumWard').value.trim();
+  const oldNumber=document.getElementById('propTaxNumOld').value.trim();
+  const number=document.getElementById('propTaxNumValue').value.trim();
+  if(!type){ toast('Select a Type'); return; }
+  if(!number){ toast('Enter the Ass. Number'); return; }
+  const same=editPropTaxNumbers.find(t=>t.type===type);
+  if(taxNumEditId){
+    if(same && same.id!==taxNumEditId){ toast('This Type already exists - edit that entry', true); return; }
+    const cur=editPropTaxNumbers.find(t=>t.id===taxNumEditId);
+    if(cur){ cur.type=type; cur.ward=ward; cur.oldNumber=oldNumber; cur.number=number; }
+  } else {
+    if(same){ taxNumEdit(same.id); toast('This Type already exists - change it and press Update'); return; }
+    editPropTaxNumbers.push({id:uid(), type:type, ward:ward, oldNumber:oldNumber, number:number});
+  }
+  taxNumClearForm(); taxNumRender(); propSecCounts();
 }
-function removePropTaxNumber(id){
-  editPropTaxNumbers=editPropTaxNumbers.filter(t=>t.id!==id);
-  renderPropTaxNumChips();
+function taxNumDelete(id){
+  askConfirm('Delete this Tax / Account Number entry?', function(){
+    editPropTaxNumbers=editPropTaxNumbers.filter(t=>t.id!==id);
+    if(taxNumEditId===id) taxNumClearForm();
+    taxNumRender(); propSecCounts();
+  });
 }
-function renderPropTaxNumChips(){
-  document.getElementById('propTaxNumChips').innerHTML = editPropTaxNumbers.map(t=>
-    `<span class="chip">${esc(t.type)}: ${esc(t.number)} <span class="x" onclick="removePropTaxNumber('${t.id}')">×</span></span>`
-  ).join('') || '<span class="sub">None added yet</span>';
+
+/* ---- Property Materials ---- */
+function matOpen(){ matClearForm(); matRender(); openModalEl('propMatBg'); }
+function matClose(){ closeModal('propMatBg'); propSecCounts(); }
+function matClearForm(){
+  matEditId=null;
+  ['propMatName','propMatQty','propMatPlace','propMatRemarks'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('propMatFormTitle').textContent='Add Item';
+  document.getElementById('propMatSaveBtn').textContent='Add';
 }
-function addPropertyMaterial(){
-  const inp=document.getElementById('propMaterialInput');
-  const v=inp.value.trim();
-  if(!v)return;
-  editPropMaterials.push({id:uid(),name:v});
-  inp.value='';
-  renderPropMaterialsChips();
+function matRender(){
+  document.getElementById('propMatList').innerHTML = editPropMaterials.map(function(m){
+    const bits=[]; if(m.qty!==undefined && m.qty!=='') bits.push('Qty: '+esc(m.qty)); if(m.place) bits.push(esc(m.place)); if(m.remarks) bits.push(esc(m.remarks));
+    return `<div class="sec-item"><div class="sec-main"><b>${esc(m.name)}</b>${bits.join(' &nbsp;|&nbsp; ')}</div>
+      <button class="btn small secondary" onclick="matEdit('${m.id}')">Edit</button>
+      <button class="btn small danger" onclick="matDelete('${m.id}')">Delete</button></div>`;
+  }).join('') || '<div class="sub" style="margin-bottom:8px">No materials added yet</div>';
 }
-function removePropertyMaterial(id){
-  editPropMaterials=editPropMaterials.filter(m=>m.id!==id);
-  renderPropMaterialsChips();
+function matEdit(id){
+  const m=editPropMaterials.find(x=>x.id===id); if(!m) return;
+  matEditId=id;
+  document.getElementById('propMatName').value=m.name||''; document.getElementById('propMatQty').value=(m.qty===undefined?'':m.qty);
+  document.getElementById('propMatPlace').value=m.place||''; document.getElementById('propMatRemarks').value=m.remarks||'';
+  document.getElementById('propMatFormTitle').textContent='Edit Item';
+  document.getElementById('propMatSaveBtn').textContent='Update';
 }
-function renderPropMaterialsChips(){
-  document.getElementById('propMaterialsChips').innerHTML = editPropMaterials.map(m=>
-    `<span class="chip">${esc(m.name)} <span class="x" onclick="removePropertyMaterial('${m.id}')">×</span></span>`
-  ).join('') || '<span class="sub">No materials added yet</span>';
+function matSave(){
+  const name=document.getElementById('propMatName').value.trim();
+  const qty=document.getElementById('propMatQty').value.trim();
+  const place=document.getElementById('propMatPlace').value.trim();
+  const remarks=document.getElementById('propMatRemarks').value.trim();
+  if(!name){ toast('Enter the Item'); return; }
+  if(qty!=='' && !(parseFloat(qty)>=0)){ toast('Quantity must be a number', true); return; }
+  if(matEditId){
+    const cur=editPropMaterials.find(m=>m.id===matEditId);
+    if(cur){ cur.name=name; cur.qty=qty; cur.place=place; cur.remarks=remarks; }
+  } else {
+    editPropMaterials.push({id:uid(), name:name, qty:qty, place:place, remarks:remarks});
+  }
+  matClearForm(); matRender(); propSecCounts();
 }
+function matDelete(id){
+  askConfirm('Delete this material?', function(){
+    editPropMaterials=editPropMaterials.filter(m=>m.id!==id);
+    if(matEditId===id) matClearForm();
+    matRender(); propSecCounts();
+  });
+}
+/* ===================== END PROPERTY POPUPS MODULE ===================== */
 function saveProperty(){
   const name=document.getElementById('propName').value.trim();
   const address=document.getElementById('propAddress').value.trim();
