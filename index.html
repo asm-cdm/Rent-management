@@ -332,8 +332,8 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
     </div>
   </div>
   <div id="reportScopeDatesWrap" style="display:none">
-    <div class="field"><label>From Date <span class="sub">(Income &amp; Expense Report only)</span></label><div class="daterow"><input type="text" id="rpFromDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rpFromDate', event)">📅</div></div></div>
-    <div class="field"><label>To Date <span class="sub">(blank = all dates)</span></label><div class="daterow"><input type="text" id="rpToDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rpToDate', event)">📅</div></div></div>
+    <div class="field"><label>From Date <span class="sub">(optional)</span></label><div class="daterow"><input type="text" id="rpFromDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rpFromDate', event)">📅</div></div></div>
+    <div class="field"><label>To Date <span class="sub">(optional)</span></label><div class="daterow"><input type="text" id="rpToDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('rpToDate', event)">📅</div></div></div>
   </div>
   <div class="modal-actions" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1896,7 +1896,18 @@ function pdfTable(doc, x, y, colWidths, headers, rows, pageTitle){
       doc.addPage(); pdfHeader(doc, pageTitle); y=30; y=drawHeaderRow(y);
     }
     let cx=x;
-    row.forEach((cell,i)=>{ doc.text(fitText(doc,cell,colWidths[i]-3), cx+2, y+rowH-2.3); cx+=colWidths[i]; });
+    if(row.centerNote){
+      /* optional: a centred note across the middle columns (used for "Main Portion") */
+      const lastW=colWidths[colWidths.length-1], nx=x+colWidths[0], nw=totalW-colWidths[0]-lastW;
+      doc.setFillColor(238,243,250); doc.rect(nx,y,nw,rowH,'F');
+      doc.setFont(undefined,'italic'); doc.setTextColor(30,58,138);
+      doc.text(row.centerNote, nx+nw/2, y+rowH-2.3, {align:'center'});
+      doc.setFont(undefined,'normal'); doc.setTextColor(0,0,0);
+      doc.text(fitText(doc,row[0],colWidths[0]-3), x+2, y+rowH-2.3);
+      doc.text(fitText(doc,row[row.length-1],lastW-3), x+totalW-lastW+2, y+rowH-2.3);
+    } else {
+      row.forEach((cell,i)=>{ doc.text(fitText(doc,cell,colWidths[i]-3), cx+2, y+rowH-2.3); cx+=colWidths[i]; });
+    }
     doc.setDrawColor(220,220,210);
     doc.line(x,y+rowH,x+totalW,y+rowH);
     y+=rowH;
@@ -2739,39 +2750,44 @@ function buildConsolidatedRentPdf(scopeIds, scopeLabel){
   pdfFooter(doc);
   return {doc, filename:`Tenant_Reports_${pdfScopeTag(scopeLabel)}_${todayDMYFile()}.pdf`};
 }
-function buildConsolidatedPropertyPdf(scopeIds, scopeLabel){
-  // scopeIds is null for All, otherwise it contains the exact property IDs
-  // selected by By Location or By Property.
-  let props=loadProps()
-    .filter(p=>p.status!=='Sold')
-    .sort((a,b)=>a.name.localeCompare(b.name));
+function buildConsolidatedPropertyPdf(scopeIds, scopeLabel, from, to, fromTxt, toTxt){
+  // scopeIds is null for All, otherwise the exact property IDs from By Location / By Property.
+  // Main property first, its linked portions directly under it ("Main Portion" note). Bottom: Consolidated by Location.
+  let props=loadProps().filter(p=>p.status!=='Sold').sort((a,b)=>a.name.localeCompare(b.name));
   if(Array.isArray(scopeIds)) props=props.filter(p=>scopeIds.includes(p.id));
+  const inScope=new Set(props.map(p=>p.id));
+  const isUnderMain=p=>!!(p.linkedTo && inScope.has(p.linkedTo));
+  const portionsOf={};
+  props.forEach(p=>{ if(isUnderMain(p)) (portionsOf[p.linkedTo]=portionsOf[p.linkedTo]||[]).push(p); });
   const doc=new jspdf.jsPDF();
   const pageTitle='Property Reports'+(scopeLabel?` — ${scopeLabel}`:'');
   pdfHeader(doc, pageTitle);
   let y=30;
   const rows=[];
-  props.forEach((p,pIdx)=>{
+  function addProp(p, asPortion){
+    const own=p.ownOccupation?'Own':'Rent';
     const merged=getMergedTaxNumbers(p);
-    if(!merged.length){
-      rows.push([p.name, '-', '-', '-', '-', p.ownOccupation?'Own':'Rent']);
-    } else {
-      merged.forEach((t,i)=>{
-        const lastPay=getLastPaymentForType(t.source, t.type);
-        rows.push([
-          i===0?p.name:'',
-          t.type + (t.inherited?' (from Main)':''),
-          t.number||'-',
-          lastPay?lastPay.date:'-',
-          lastPay?'Rs.'+lastPay.amount:'-',
-          i===0?(p.ownOccupation?'Own':'Rent'):''
-        ]);
-      });
+    const show=asPortion ? merged.filter(t=>!t.inherited) : merged;
+    const inherits=asPortion && merged.some(t=>t.inherited);
+    show.forEach((t,i)=>{
+      const lastPay=getLastPaymentForType(t.source, t.type);
+      rows.push([i===0?p.name:'', t.type+(t.inherited?' (from Main)':''), t.number||'-', lastPay?lastPay.date:'-', lastPay?'Rs.'+lastPay.amount:'-', i===0?own:'']);
+    });
+    if(inherits){
+      const r=[show.length?'':p.name,'','','','',show.length?'':own]; r.centerNote='Main Portion'; rows.push(r);
+    } else if(!show.length){
+      rows.push([p.name,'-','-','-','-',own]);
     }
-    if(pIdx < props.length-1) rows.push(['','','','','','']); // blank line between properties
+  }
+  const roots=props.filter(p=>!isUnderMain(p));
+  roots.forEach((p,i)=>{
+    addProp(p,false);
+    (portionsOf[p.id]||[]).forEach(q=>addProp(q,true));
+    if(i<roots.length-1) rows.push(['','','','','','']); // blank line between groups
   });
   y = pdfTable(doc, 14, y, [40,30,26,28,28,24], ['Property','Type','Number','Last Paid Date','Amount','Own/Rent'], rows.length?rows:[['No properties in this scope','-','-','-','-','-']], pageTitle);
-  pdfFooter(doc);
+  y = rpLocationSummary(doc, y, props, from, to, fromTxt, toTxt, pageTitle);
+  const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); pdfFooter(doc); }
   return {doc, filename:`Property_Reports_${pdfScopeTag(scopeLabel)}_${todayDMYFile()}.pdf`};
 }
 
@@ -2868,6 +2884,8 @@ function generateScopedVacateHistory(){
   pdfShow(doc, filename);
 }
 function generateScopedReport(){
+  let rd=null;
+  if(reportScopeTarget==='property'){ rd=rpReadDates(); if(!rd) return; }
   const mode=document.getElementById('reportScopeMode').value;
   let scopeIds=null, scopeLabel=null;
   if(mode==='location'){
@@ -2899,11 +2917,15 @@ function generateScopedReport(){
     scopeIds=[p.id];
     scopeLabel=p.name;
   }
+  let res;
+  try{
+    res = reportScopeTarget==='rent'
+      ? buildConsolidatedRentPdf(scopeIds, scopeLabel)
+      : buildConsolidatedPropertyPdf(scopeIds, scopeLabel, rd.from, rd.to, rd.fromTxt, rd.toTxt);
+  }catch(err){ toast('Report problem: '+((err&&err.message)?err.message:err), true); return; }
+  if(reportScopeTarget==='property') rpResetDates();
   closeModal('reportScopeBg');
-  const {doc, filename} = reportScopeTarget==='rent'
-    ? buildConsolidatedRentPdf(scopeIds, scopeLabel)
-    : buildConsolidatedPropertyPdf(scopeIds, scopeLabel);
-  pdfShow(doc, filename);
+  pdfShow(res.doc, res.filename);
 }
 
 /* ===================== PROPERTY INCOME & EXPENSE REPORT MODULE (isolated - reads only; own From/To dates) =====================
@@ -2922,6 +2944,83 @@ function rpScopeSetup(target){
   const el=document.getElementById(id); if(!el) return;
   el.addEventListener('change',function(){ const v=dvParse(el.value,{}); if(v.ok) el.value=v.value; else toast(v.msg.charAt(0).toUpperCase()+v.msg.slice(1), true); });
 });
+function rpReadDates(){
+  if(!dvCheckAll([['rpFromDate','From Date'],['rpToDate','To Date']])) return null;
+  const fromTxt=document.getElementById('rpFromDate').value.trim(), toTxt=document.getElementById('rpToDate').value.trim();
+  const from=dmyToDate(fromTxt), to=dmyToDate(toTxt);
+  if(from && to && from>to){ toast('From Date cannot be after To Date', true); return null; }
+  return {from:from, to:to, fromTxt:fromTxt, toTxt:toTxt};
+}
+/* Bottom of the Property Report: "Consolidated by Location" - A. Tax Details, then B. Income & Expenses.
+   No From/To dates = everything up to today ("as on" today). Income blue, Expenses/Tax red, Net blue or red. */
+function rpLocationSummary(doc,y,props,from,to,fromTxt,toTxt,pageTitle){
+  if(!props.length) return y;
+  const asOn=todayDMY(), effTo=to||dvTodayStart();
+  const period=(from||to) ? 'Period: '+(fromTxt||'start')+' to '+(toTxt||asOn) : 'As on '+asOn;
+  const rents=loadRents(), locs={};
+  props.forEach(function(p){
+    const label=(p.location||'').trim()||'(No Location)', key=label.toLowerCase();
+    const L=locs[key]||(locs[key]={label:label,income:0,exp:0,tax:0,types:{}});
+    const c=rpCollect(p,rents,from,effTo);
+    c.income.forEach(e=>{ L.income+=e.amt; });
+    c.expense.forEach(e=>{ L.exp+=e.amt; });
+    c.tax.forEach(e=>{ L.tax+=e.amt; L.types[e.type]=(L.types[e.type]||0)+e.amt; });
+  });
+  const list=Object.keys(locs).map(k=>locs[k]).sort((a,b)=>a.label.localeCompare(b.label));
+  const x=14, rowH=7, limit=()=>doc.internal.pageSize.getHeight()-26;
+  function newPage(){ doc.addPage(); pdfHeader(doc,pageTitle); y=30; }
+  function ensure(h){ if(y+h>limit()) newPage(); }
+  function head(w,t,al){
+    const tw=w.reduce((a,b)=>a+b,0);
+    doc.setFillColor(231,239,232); doc.rect(x,y,tw,rowH,'F');
+    doc.setFont(undefined,'bold'); doc.setFontSize(8.5); doc.setTextColor(30,58,138);
+    let cx=x; t.forEach(function(h,i){ if(al[i]==='r') doc.text(h,cx+w[i]-2,y+rowH-2.3,{align:'right'}); else doc.text(h,cx+2,y+rowH-2.3); cx+=w[i]; });
+    doc.setFont(undefined,'normal'); doc.setTextColor(0,0,0); y+=rowH;
+  }
+  function table(w,t,al,rowsList){
+    const tw=w.reduce((a,b)=>a+b,0);
+    head(w,t,al);
+    rowsList.forEach(function(r){
+      if(y+rowH>limit()){ newPage(); head(w,t,al); }
+      if(r.top){ doc.setDrawColor(150,150,140); doc.line(x,y,x+tw,y); }
+      doc.setFont(undefined,r.bold?'bold':'normal'); doc.setFontSize(8.5);
+      let cx=x;
+      r.c.forEach(function(v,i){
+        const k=r.col&&r.col[i]; if(k) doc.setTextColor(k[0],k[1],k[2]); else doc.setTextColor(0,0,0);
+        if(al[i]==='r') doc.text(String(v),cx+w[i]-2,y+rowH-2.3,{align:'right'}); else doc.text(fitText(doc,v,w[i]-3),cx+2,y+rowH-2.3);
+        cx+=w[i];
+      });
+      doc.setTextColor(0,0,0); doc.setFont(undefined,'normal'); doc.setDrawColor(220,220,210); doc.line(x,y+rowH,x+tw,y+rowH);
+      y+=rowH;
+    });
+  }
+  function sub(text){ ensure(24); doc.setFont(undefined,'bold'); doc.setFontSize(10); doc.setTextColor(0,0,0); doc.text(text,x,y+4); doc.setFont(undefined,'normal'); y+=7; }
+  y+=10; ensure(34);
+  doc.setFont(undefined,'bold'); doc.setFontSize(12); doc.setTextColor(0,0,0); doc.text('Consolidated by Location',x,y+4);
+  doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(110,110,110); doc.text(period,x,y+10); doc.setTextColor(0,0,0);
+  y+=15;
+  sub('A. Tax Details');
+  const rowsA=[];
+  list.forEach(function(L){
+    const names=Object.keys(L.types).sort();
+    if(!names.length){ rowsA.push({c:[L.label,'No tax paid',rpMoney(0)]}); return; }
+    names.forEach((n,i)=>rowsA.push({c:[i?'':L.label,n,rpMoney(L.types[n])],col:[null,null,RP_RED]}));
+    rowsA.push({c:['','Tax Total',rpMoney(L.tax)],col:[null,null,RP_RED],bold:true,top:true});
+  });
+  table([64,64,48],['Location','Type','Paid'],['l','l','r'],rowsA);
+  y+=8; sub('B. Income & Expenses');
+  const rowsB=[]; let ti=0,te=0,tt=0;
+  list.forEach(function(L){
+    const net=L.income-L.exp-L.tax; ti+=L.income; te+=L.exp; tt+=L.tax;
+    rowsB.push({c:[L.label,rpMoney(L.income),rpMoney(L.exp),rpMoney(L.tax),rpMoney(net)],col:[null,RP_BLUE,RP_RED,RP_RED,net<0?RP_RED:RP_BLUE]});
+  });
+  if(list.length>1){
+    const net=ti-te-tt;
+    rowsB.push({c:['Total',rpMoney(ti),rpMoney(te),rpMoney(tt),rpMoney(net)],col:[null,RP_BLUE,RP_RED,RP_RED,net<0?RP_RED:RP_BLUE],bold:true,top:true});
+  }
+  table([50,32,32,30,32],['Location','Income','Expenses','Tax','Net'],['l','r','r','r','r'],rowsB);
+  return y;
+}
 function rpMoney(n){ return (n<0?'-':'')+'Rs.'+Math.abs(n).toFixed(2); }
 function rpTime(s){ const d=dmyToDate(s); return d?d.getTime():0; }
 function rpInRange(dmy,from,to){
@@ -2971,7 +3070,7 @@ function rpCollect(p,rents,from,to){
     if(!rpInRange(t.date,from,to)) return;
     const m=merged.find(z=>z.type===t.type);
     const acct=(t.refNo&&t.refNo!=='-'?t.refNo:'')||(m&&m.number)||'';
-    out.tax.push({date:t.date||'-', num:((t.type||'Tax')+(acct?' '+acct:'')).trim(), paidDate:t.date||'-', amt:parseFloat(t.amount)||0});
+    out.tax.push({type:(t.type||'Tax'), date:t.date||'-', num:((t.type||'Tax')+(acct?' '+acct:'')).trim(), paidDate:t.date||'-', amt:parseFloat(t.amount)||0});
   });
   ['income','expense','tax'].forEach(k=>out[k].sort((a,b)=>rpTime(a.paidDate)-rpTime(b.paidDate)));
   return out;
@@ -2982,7 +3081,8 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
   const rents=loadRents();
   const doc=new jspdf.jsPDF();
   const pageTitle='Income & Expense Report'+(scopeLabel?' — '+scopeLabel:'');
-  const period = (fromTxt&&toTxt) ? 'Period: '+fromTxt+' to '+toTxt : fromTxt ? 'Period: from '+fromTxt : toTxt ? 'Period: up to '+toTxt : 'Period: All dates';
+  const effTo=to||dvTodayStart();
+  const period = (fromTxt&&toTxt) ? 'Period: '+fromTxt+' to '+toTxt : fromTxt ? 'Period: from '+fromTxt+' to '+todayDMY() : toTxt ? 'Period: up to '+toTxt : 'As on '+todayDMY();
   const x=14, cw=[26,30,56,28,42], totalW=182, rowH=7, fs=8.5;
   const limit=()=>doc.internal.pageSize.getHeight()-26;
   let y=0;
@@ -3015,7 +3115,7 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
   }
   pdfHeader(doc,pageTitle); startPage(true);
   props.forEach(function(p){
-    const c=rpCollect(p,rents,from,to);
+    const c=rpCollect(p,rents,from,effTo);
     if(y+34>limit()) startPage(false);
     doc.setFont(undefined,'bold'); doc.setFontSize(11); doc.setTextColor(0,0,0);
     doc.text(fitText(doc,p.name,totalW),x,y+4);
@@ -3042,6 +3142,7 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
     y+=rowH+9;
   });
   if(!props.length){ doc.setFontSize(10); doc.text('No properties in this scope',x,y+4); }
+  else y=rpLocationSummary(doc,y,props,from,to,fromTxt,toTxt,pageTitle);
   const n=doc.getNumberOfPages(); for(let i=1;i<=n;i++){ doc.setPage(i); pdfFooter(doc); }
   return {doc, filename:'Income_Expense_Report_'+pdfScopeTag(scopeLabel)+'_'+todayDMYFile()+'.pdf'};
 }
