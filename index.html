@@ -1140,6 +1140,7 @@ function selectTypeGeneric(searchId,hiddenId,boxId,t){
   document.getElementById(hiddenId).value=t;
   document.getElementById(searchId).value=t;
   document.getElementById(boxId).classList.remove('show');
+  if(hiddenId==='taxPayType') taxPayFillNumber();
 }
 function addNewTypeGeneric(searchId,hiddenId,boxId,t,listName){
   listName = listName||'tax';
@@ -1148,6 +1149,19 @@ function addNewTypeGeneric(searchId,hiddenId,boxId,t,listName){
   selectTypeGeneric(searchId,hiddenId,boxId,t);
 }
 document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { ['taxPayTypeOpts','propTaxNumTypeOpts','propLocationOpts','reportScopeLocationOpts','reportScopePropOpts','propPayBankOpts','propPayGpayOpts'].forEach(id=>{ const o=document.getElementById(id); if(o) o.classList.remove('show'); }); } });
+/* Payment form: the Number box follows the Type, from the number saved in the property (own, or main property's for a linked portion) */
+function taxPayOnFile(){
+  const propId=document.getElementById('taxPayPropId').value, type=document.getElementById('taxPayType').value;
+  const p=loadProps().find(x=>x.id===propId);
+  if(!p||!type) return '';
+  const m=getMergedTaxNumbers(p).find(t=>t.type===type);
+  return (m&&m.number)?String(m.number):'';
+}
+function taxPayFillNumber(){
+  const box=document.getElementById('taxPayRefNo'), num=taxPayOnFile();
+  box.value=num;
+  box.placeholder = num ? 'Number on file' : 'No number saved - enter one';
+}
 function openTaxPay(propId){
   document.getElementById('taxPayPropId').value=propId;
   ['taxPayRefNo','taxPayAmt','taxPayReceipt'].forEach(f=>document.getElementById(f).value='');
@@ -1164,6 +1178,7 @@ function saveTaxPayment(){
   const p=props.find(x=>x.id===propId);
   const type=document.getElementById('taxPayType').value;
   const refNo=document.getElementById('taxPayRefNo').value.trim();
+  const onFileNum=(()=>{ const m=getMergedTaxNumbers(p).find(t=>t.type===type); return (m&&m.number)?String(m.number):''; })();
   p.taxPayments=p.taxPayments||[];
   p.taxPayments.push({
     id:uid(), type, refNo, amount:amt,
@@ -1171,8 +1186,8 @@ function saveTaxPayment(){
     receipt:document.getElementById('taxPayReceipt').value.trim(),
     date:document.getElementById('taxPayDate').value
   });
-  // if a new reference number was entered, update (or create) this property's OWN taxNumbers entry for this type
-  if(type && refNo){
+  // only if the number was CHANGED from the one on file, update (or create) this property's OWN taxNumbers entry for this type
+  if(type && refNo && refNo!==onFileNum){
     p.taxNumbers=p.taxNumbers||[];
     const existingNum=p.taxNumbers.find(t=>t.type===type);
     if(existingNum){ existingNum.number=refNo; } else { p.taxNumbers.push({id:uid(), type, number:refNo}); }
@@ -2918,7 +2933,7 @@ function rpCollect(p,rents,from,to){
   (p.taxPayments||[]).forEach(function(t){
     if(!rpInRange(t.date,from,to)) return;
     const m=merged.find(z=>z.type===t.type);
-    const acct=(m&&m.number)||(t.refNo&&t.refNo!=='-'?t.refNo:'')||'';
+    const acct=(t.refNo&&t.refNo!=='-'?t.refNo:'')||(m&&m.number)||'';
     out.tax.push({date:t.date||'-', num:((t.type||'Tax')+(acct?' '+acct:'')).trim(), paidDate:t.date||'-', amt:parseFloat(t.amount)||0});
   });
   ['income','expense','tax'].forEach(k=>out[k].sort((a,b)=>rpTime(a.paidDate)-rpTime(b.paidDate)));
