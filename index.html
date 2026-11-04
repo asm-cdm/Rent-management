@@ -2931,6 +2931,7 @@ function generateScopedReport(){
 /* ===================== PROPERTY INCOME & EXPENSE REPORT MODULE (isolated - reads only; own From/To dates) =====================
    One block per property: Name, Own/Rent, then rows (Rent Income = blue, Expenses = red, Tax = red), then Net Amount.
    Rent Income counts only rent actually PAID (ledger Paid Amount). Due / balance / advance are not counted.
+   Net = Rent Income - Expenses (maintenance). Tax rows are listed in red for information and are NOT deducted.
    From/To dates filter by Paid Date (Expenses and Tax use their entry date). Boxes are cleared after every report. */
 const RP_BLUE=[0,70,200], RP_RED=[200,0,0];
 function rpResetDates(){ ['rpFromDate','rpToDate'].forEach(function(id){ const el=document.getElementById(id); if(el) el.value=''; }); }
@@ -3008,17 +3009,17 @@ function rpLocationSummary(doc,y,props,from,to,fromTxt,toTxt,pageTitle){
     rowsA.push({c:['','Tax Total',rpMoney(L.tax)],col:[null,null,RP_RED],bold:true,top:true});
   });
   table([64,64,48],['Location','Type','Paid'],['l','l','r'],rowsA);
-  y+=8; sub('B. Income & Expenses');
-  const rowsB=[]; let ti=0,te=0,tt=0;
+  y+=8; sub('B. Income & Expenses  (Net = Income - Expenses; Tax is not deducted)');
+  const rowsB=[]; let ti=0,te=0;
   list.forEach(function(L){
-    const net=L.income-L.exp-L.tax; ti+=L.income; te+=L.exp; tt+=L.tax;
-    rowsB.push({c:[L.label,rpMoney(L.income),rpMoney(L.exp),rpMoney(L.tax),rpMoney(net)],col:[null,RP_BLUE,RP_RED,RP_RED,net<0?RP_RED:RP_BLUE]});
+    const net=L.income-L.exp; ti+=L.income; te+=L.exp;
+    rowsB.push({c:[L.label,rpMoney(L.income),rpMoney(L.exp),rpMoney(net)],col:[null,RP_BLUE,RP_RED,net<0?RP_RED:RP_BLUE]});
   });
   if(list.length>1){
-    const net=ti-te-tt;
-    rowsB.push({c:['Total',rpMoney(ti),rpMoney(te),rpMoney(tt),rpMoney(net)],col:[null,RP_BLUE,RP_RED,RP_RED,net<0?RP_RED:RP_BLUE],bold:true,top:true});
+    const net=ti-te;
+    rowsB.push({c:['Total',rpMoney(ti),rpMoney(te),rpMoney(net)],col:[null,RP_BLUE,RP_RED,net<0?RP_RED:RP_BLUE],bold:true,top:true});
   }
-  table([50,32,32,30,32],['Location','Income','Expenses','Tax','Net'],['l','r','r','r','r'],rowsB);
+  table([64,38,38,36],['Location','Income','Expenses','Net'],['l','r','r','r'],rowsB);
   return y;
 }
 function rpMoney(n){ return (n<0?'-':'')+'Rs.'+Math.abs(n).toFixed(2); }
@@ -3122,7 +3123,7 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
     doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
     doc.text(p.ownOccupation?'Own':'Rent',x,y+9); doc.setTextColor(0,0,0);
     y+=12; head();
-    const sections=[['Rent Income',c.income,RP_BLUE,1],['Expenses',c.expense,RP_RED,-1],['Tax',c.tax,RP_RED,-1]];
+    const sections=[['Rent Income',c.income,RP_BLUE,1],['Expenses',c.expense,RP_RED,-1],['Tax',c.tax,RP_RED,0]];
     let net=0, count=0;
     sections.forEach(function(sec){
       sec[1].forEach(function(e){
@@ -3136,7 +3137,7 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
     doc.setDrawColor(150,150,140); doc.line(x,y,x+totalW,y);
     doc.setFont(undefined,'bold'); doc.setFontSize(9.5);
     const col=net<0?RP_RED:RP_BLUE; doc.setTextColor(col[0],col[1],col[2]);
-    doc.text('Net Amount',x+2,y+rowH-2);
+    doc.text('Net Amount  (Rent Income - Expenses; Tax not deducted)',x+2,y+rowH-2);
     doc.text(rpMoney(net),x+totalW-2,y+rowH-2,{align:'right'});
     doc.setTextColor(0,0,0); doc.setFont(undefined,'normal');
     y+=rowH+9;
