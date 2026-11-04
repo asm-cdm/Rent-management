@@ -485,7 +485,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
   <h2>Add Tax / Account Payment</h2>
   <input type="hidden" id="taxPayPropId">
   <div class="field"><label>Type</label>
-    <div class="searchsel"><input type="text" id="taxPayTypeSearch" placeholder="Type to search or add..." oninput="filterTaxTypeOpts()" onfocus="filterTaxTypeOpts()">
+    <div class="searchsel"><input type="text" id="taxPayTypeSearch" placeholder="Select type..." oninput="taxPayFilterTypes()" onfocus="taxPayFilterTypes()">
       <input type="hidden" id="taxPayType">
       <div class="opts" id="taxPayTypeOpts"></div>
     </div>
@@ -1162,11 +1162,47 @@ function taxPayFillNumber(){
   box.value=num;
   box.placeholder = num ? 'Number on file' : 'No number saved - enter one';
 }
+/* Add Payment: Type is SELECT-ONLY, from the types saved in this property's Tax / Account Numbers (own + main property's for a linked portion).
+   New types are added in the Tax / Account Numbers popup of the Property form, never here. */
+function taxPayTypes(){
+  const p=loadProps().find(x=>x.id===document.getElementById('taxPayPropId').value);
+  return p ? getMergedTaxNumbers(p).map(t=>t.type) : [];
+}
+function taxPayFilterTypes(){
+  const search=document.getElementById('taxPayTypeSearch'), hidden=document.getElementById('taxPayType'), box=document.getElementById('taxPayTypeOpts');
+  const q=search.value.trim();
+  if(q!==hidden.value){ hidden.value=''; taxPayFillNumber(); }
+  const all=taxPayTypes(), needle=(q===hidden.value)?'':q.toLowerCase();
+  const list=all.filter(t=>t.toLowerCase().includes(needle));
+  box.innerHTML = list.length
+    ? list.map(t=>`<div class="opt" onclick="selectTypeGeneric('taxPayTypeSearch','taxPayType','taxPayTypeOpts',${jsq(t)})">${esc(t)}</div>`).join('')
+    : `<div class="opt sub">${all.length?'No match':'No Type saved - add it in Tax / Account Numbers (Property form)'}</div>`;
+  box.classList.add('show');
+}
+/* Arrow keys for every type-to-filter search: Down/Up move, Enter picks, Esc closes (one shared handler) */
+document.addEventListener('keydown',function(e){
+  const inp=e.target; if(!inp||inp.tagName!=='INPUT') return;
+  const wrap=inp.closest('.searchsel'); if(!wrap) return;
+  const box=wrap.querySelector('.opts'); if(!box||!box.classList.contains('show')) return;
+  const opts=[...box.querySelectorAll('.opt:not(.sub)')]; if(!opts.length) return;
+  let i=opts.findIndex(o=>o.classList.contains('hl'));
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    i = e.key==='ArrowDown' ? (i+1)%opts.length : (i<=0?opts.length-1:i-1);
+    opts.forEach(o=>o.classList.remove('hl')); opts[i].classList.add('hl'); if(opts[i].scrollIntoView) opts[i].scrollIntoView({block:'nearest'});
+  } else if(e.key==='Enter'){
+    if(i<0 && opts.length===1) i=0;
+    if(i>=0){ e.preventDefault(); opts[i].click(); }
+  } else if(e.key==='Escape'){ box.classList.remove('show'); }
+});
 function openTaxPay(propId){
   document.getElementById('taxPayPropId').value=propId;
   ['taxPayRefNo','taxPayAmt','taxPayReceipt'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('taxPayDate').value=todayDMY();
-  selectTypeGeneric('taxPayTypeSearch','taxPayType','taxPayTypeOpts','Property Tax');
+  document.getElementById('taxPayTypeSearch').value=''; document.getElementById('taxPayType').value='';
+  document.getElementById('taxPayTypeOpts').classList.remove('show');
+  const saved=taxPayTypes(), first=saved.includes('Property Tax')?'Property Tax':(saved[0]||'');
+  if(first) selectTypeGeneric('taxPayTypeSearch','taxPayType','taxPayTypeOpts',first); else taxPayFillNumber();
   openModalEl('taxPayBg');
 }
 function saveTaxPayment(){
@@ -1177,6 +1213,7 @@ function saveTaxPayment(){
   let props=loadProps();
   const p=props.find(x=>x.id===propId);
   const type=document.getElementById('taxPayType').value;
+  if(!type){ toast('Select a Type (add it in Tax / Account Numbers first)'); return; }
   const refNo=document.getElementById('taxPayRefNo').value.trim();
   const onFileNum=(()=>{ const m=getMergedTaxNumbers(p).find(t=>t.type===type); return (m&&m.number)?String(m.number):''; })();
   p.taxPayments=p.taxPayments||[];
