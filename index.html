@@ -119,6 +119,14 @@ main{padding:16px;max-width:1100px;margin:0 auto}
 .searchsel .opt{padding:9px 12px;cursor:pointer;font-size:14px}
 .searchsel .opt:hover,.searchsel .opt.hl{background:var(--brand-lt)}
 .searchsel .opt .sm{color:var(--sub);font-size:12px}
+.hx-mod{border:1px solid var(--line);border-radius:10px;margin:10px 0;background:#fff}
+.hx-head{display:flex;gap:8px;align-items:center;padding:11px 12px;cursor:pointer;font-size:14px}
+.hx-arrow{width:14px;color:var(--sub)}
+.hx-mod-body{border-top:1px solid var(--line);padding:10px 12px}
+.hx-row{cursor:pointer}
+.hx-row.sel td{background:var(--brand-lt)}
+.hx-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.hx-btns .btn:disabled{opacity:.45;cursor:not-allowed}
 table.led{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
 table.led th{text-align:left;color:var(--sub);font-size:11.5px;padding:6px 6px;border-bottom:2px solid var(--line)}
 table.led td{padding:6px 6px;border-bottom:1px solid var(--line)}
@@ -482,8 +490,8 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
 
 <!-- ============ TAX PAYMENT MODAL ============ -->
 <div class="modal-bg" id="taxPayBg" style="align-items:center"><div class="modal" style="max-width:340px">
-  <h2>Add Tax / Account Payment</h2>
-  <input type="hidden" id="taxPayPropId">
+  <h2 id="taxPayTitle">Add Tax / Account Payment</h2>
+  <input type="hidden" id="taxPayPropId"><input type="hidden" id="taxPayEditId">
   <div class="field"><label>Type</label>
     <div class="searchsel"><input type="text" id="taxPayTypeSearch" placeholder="Select type..." oninput="taxPayFilterTypes()" onfocus="taxPayFilterTypes()">
       <input type="hidden" id="taxPayType">
@@ -501,7 +509,27 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
   <div class="field"><label>Date</label><div class="daterow"><input type="text" id="taxPayDate" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('taxPayDate', event)">📅</div></div></div>
   <div class="modal-actions">
     <button class="btn secondary" onclick="closeModal('taxPayBg')">Cancel</button>
-    <button class="btn" onclick="saveTaxPayment()">Save Payment</button>
+    <button class="btn" id="taxPaySaveBtn" onclick="saveTaxPayment()">Save Payment</button>
+  </div>
+</div></div>
+
+<!-- ============ MONTHLY RENT - EDIT POPUP (opened from the tenant's Monthly Rent History) ============ -->
+<div class="modal-bg" id="leBg" style="z-index:55"><div class="modal" style="max-width:360px">
+  <h2>Monthly Rent</h2>
+  <input type="hidden" id="leIdx">
+  <div class="grid2">
+    <div class="field"><label>Due Date</label><div class="daterow"><input type="text" id="leDue" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('leDue', event)">📅</div></div></div>
+    <div class="field"><label>Rent</label><input type="number" id="leRent"></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Paid Date</label><div class="daterow"><input type="text" id="lePaid" placeholder="DD-MM-YYYY"><div class="cal" onclick="openDatePicker('lePaid', event)">📅</div></div></div>
+    <div class="field"><label>Paid Amount</label><input type="number" id="lePaidAmt"></div>
+  </div>
+  <div class="field"><label>Type</label><select id="leType"><option>Cash</option><option>UPI</option><option>Bank</option></select></div>
+  <div class="field"><label>Note</label><input type="text" id="leNote"></div>
+  <div class="modal-actions">
+    <button class="btn secondary" onclick="closeModal('leBg')">Cancel</button>
+    <button class="btn" onclick="leSave()">Save</button>
   </div>
 </div></div>
 
@@ -742,7 +770,7 @@ function renderDatePicker(){
     html+=`<div class="${cls}" onclick="dpSelect(${d})">${d}</div>`;
   }
   html+='</div>';
-  html+=`<div class="dp-foot"><button type="button" onclick="dpToday()">Today</button>${dpTargetField==='ldgPaid_'||String(dpTargetField).indexOf('ldgPaid_')===0?'<button type="button" onclick="dpClear()">Clear</button>':''}<button type="button" onclick="closeDatePicker()">Close</button></div>`;
+  html+=`<div class="dp-foot"><button type="button" onclick="dpToday()">Today</button>${dpTargetField==='ldgPaid_'||dpTargetField==='lePaid'||String(dpTargetField).indexOf('ldgPaid_')===0?'<button type="button" onclick="dpClear()">Clear</button>':''}<button type="button" onclick="closeDatePicker()">Close</button></div>`;
   document.getElementById('dpPopup').innerHTML=html;
 }
 function dpNav(delta){ dpViewDate=new Date(dpViewDate.getFullYear(), dpViewDate.getMonth()+delta, 1); renderDatePicker(); }
@@ -1051,6 +1079,7 @@ document.getElementById('propSearch').addEventListener('input',renderPropList);
 document.addEventListener('click',(e)=>{ if(!e.target.closest('.searchsel')) { const o=document.getElementById('propMainOpts'); if(o) o.classList.remove('show'); } });
 
 function viewProperty(id){
+  if(!document.getElementById('propViewBg').classList.contains('show')) taxMod={prop:null,sel:null};   // fresh open = history closed
   const p=loadProps().find(x=>x.id===id);
   const rents=loadRents().filter(r=>r.propertyId===id);
   document.getElementById('propViewTitle').textContent=p.name;
@@ -1059,9 +1088,14 @@ function viewProperty(id){
   const merged = getMergedTaxNumbers(p);
   const taxNumLines = merged.map(t=>`<div><b>${esc(t.type)}:</b> ${esc(t.number)}${t.inherited?' <span class="sub">(from Main)</span>':''}</div>`).join('') || '<div class="sub">None added yet</div>';
   const isSold = p.status==='Sold';
-  const taxRows=(p.taxPayments||[]).slice().reverse().map(t=>
-    `<tr><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td>${esc(t.refNo||'-')}</td><td>₹${esc(t.amount)}</td><td>${esc(t.mode)}</td><td>${esc(t.receipt||'-')}</td><td>${isSold?'':`<span class="x" style="cursor:pointer;color:#8C2F2F" onclick="deleteTaxPayment('${p.id}','${t.id}')">✕</span>`}</td></tr>`
-  ).join('') || '<tr><td colspan="7" class="sub">No payments recorded</td></tr>';
+  const taxList=(p.taxPayments||[]).slice().reverse();
+  const taxIsOpen=(taxMod.prop===p.id);
+  const taxRowsHtml=taxList.map(t=>`<tr class="hx-row${taxMod.sel===t.id?' sel':''}" data-id="${t.id}" onclick="taxModSelect('${t.id}')"><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td>${esc(t.refNo||'-')}</td><td>₹${esc(t.amount)}</td><td>${esc(t.mode)}</td><td>${esc(t.receipt||'-')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">No payments recorded</td></tr>';
+  const taxModule=`<div class="hx-mod">
+    <div class="hx-head" onclick="taxModToggle('${p.id}')"><span class="hx-arrow">${taxIsOpen?'▾':'▸'}</span><b>Tax / Account Payment History</b></div>
+    ${taxIsOpen?`<div class="hx-mod-body"><div style="overflow-x:auto"><table class="led"><tr><th>Date</th><th>Type</th><th>Ref No.</th><th>Amount</th><th>Mode</th><th>Receipt</th></tr>${taxRowsHtml}</table></div>
+      <div class="hx-btns">${isSold?'':`<button class="btn small" onclick="openTaxPay('${p.id}')">Add</button><button class="btn small secondary" id="taxModEdit" onclick="taxModEdit('${p.id}')" ${taxMod.sel?'':'disabled'}>Edit</button><button class="btn small danger" id="taxModDel" onclick="taxModDelete('${p.id}')" ${taxMod.sel?'':'disabled'}>Delete</button>`}<button class="btn small secondary" onclick="taxModToggle('${p.id}')">Close</button></div></div>`:''}
+  </div>`;
   const rentRows=rents.map(r=>`<tr><td>${esc(r.tenantName)}</td><td>${r.status}</td><td>₹${esc(r.monthlyRent)}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">No tenant history</td></tr>';
   const materials=(p.materials||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('') || '<span class="sub">None</span>';
   document.getElementById('propViewBody').innerHTML = `
@@ -1074,8 +1108,7 @@ function viewProperty(id){
     ${payViewHtml(p)}
     <h3>Materials</h3>
     <div class="chiplist">${materials}</div>
-    <h3>Tax / Account Payment History ${isSold?'':`<button class="btn small" style="float:right" onclick="openTaxPay('${p.id}')">+ Add Payment</button>`}</h3>
-    <table class="led"><tr><th>Date</th><th>Type</th><th>Ref No.</th><th>Amount</th><th>Mode</th><th>Receipt</th><th></th></tr>${taxRows}</table>
+    ${taxModule}
     <h3>Tenant History</h3>
     <table class="led"><tr><th>Tenant</th><th>Status</th><th>Monthly Rent</th></tr>${rentRows}</table>
     <h3>Actions</h3>
@@ -1195,14 +1228,28 @@ document.addEventListener('keydown',function(e){
     if(i>=0){ e.preventDefault(); opts[i].click(); }
   } else if(e.key==='Escape'){ box.classList.remove('show'); }
 });
-function openTaxPay(propId){
+function openTaxPay(propId, payId){
   document.getElementById('taxPayPropId').value=propId;
+  document.getElementById('taxPayEditId').value=payId||'';
+  document.getElementById('taxPayTitle').textContent=payId?'Edit Tax / Account Payment':'Add Tax / Account Payment';
+  document.getElementById('taxPaySaveBtn').textContent=payId?'Update Payment':'Save Payment';
   ['taxPayRefNo','taxPayAmt','taxPayReceipt'].forEach(f=>document.getElementById(f).value='');
   document.getElementById('taxPayDate').value=todayDMY();
   document.getElementById('taxPayTypeSearch').value=''; document.getElementById('taxPayType').value='';
   document.getElementById('taxPayTypeOpts').classList.remove('show');
   const saved=taxPayTypes(), first=saved.includes('Property Tax')?'Property Tax':(saved[0]||'');
   if(first) selectTypeGeneric('taxPayTypeSearch','taxPayType','taxPayTypeOpts',first); else taxPayFillNumber();
+  if(payId){   // Edit: load the saved payment into the form
+    const pp=loadProps().find(x=>x.id===propId), t=pp&&(pp.taxPayments||[]).find(x=>x.id===payId);
+    if(t){
+      selectTypeGeneric('taxPayTypeSearch','taxPayType','taxPayTypeOpts',t.type);
+      document.getElementById('taxPayRefNo').value=t.refNo||'';
+      document.getElementById('taxPayAmt').value=t.amount;
+      document.getElementById('taxPayMode').value=t.mode||'Cash';
+      document.getElementById('taxPayReceipt').value=t.receipt||'';
+      document.getElementById('taxPayDate').value=t.date||'';
+    }
+  }
   openModalEl('taxPayBg');
 }
 function saveTaxPayment(){
@@ -1217,12 +1264,13 @@ function saveTaxPayment(){
   const refNo=document.getElementById('taxPayRefNo').value.trim();
   const onFileNum=(()=>{ const m=getMergedTaxNumbers(p).find(t=>t.type===type); return (m&&m.number)?String(m.number):''; })();
   p.taxPayments=p.taxPayments||[];
-  p.taxPayments.push({
-    id:uid(), type, refNo, amount:amt,
+  const editId=document.getElementById('taxPayEditId').value;
+  const rec={ type, refNo, amount:amt,
     mode:document.getElementById('taxPayMode').value,
     receipt:document.getElementById('taxPayReceipt').value.trim(),
-    date:document.getElementById('taxPayDate').value
-  });
+    date:document.getElementById('taxPayDate').value };
+  const existingPay = editId ? p.taxPayments.find(t=>t.id===editId) : null;
+  if(existingPay) Object.assign(existingPay, rec); else p.taxPayments.push(Object.assign({id:uid()}, rec));
   // only if the number was CHANGED from the one on file, update (or create) this property's OWN taxNumbers entry for this type
   if(type && refNo && refNo!==onFileNum){
     p.taxNumbers=p.taxNumbers||[];
@@ -1232,13 +1280,14 @@ function saveTaxPayment(){
   if(!saveProps(props)) return;
   closeModal('taxPayBg');
   viewProperty(propId);
-  toast('Payment recorded');
+  toast(existingPay?'Payment updated':'Payment recorded');
 }
 function deleteTaxPayment(propId, paymentId){
   askConfirm('Delete this payment entry? This cannot be undone.', ()=>{
     let props=loadProps();
     const p=props.find(x=>x.id===propId);
     p.taxPayments=(p.taxPayments||[]).filter(t=>t.id!==paymentId);
+    if(taxMod.sel===paymentId) taxMod.sel=null;
     if(!saveProps(props)) return;
     viewProperty(propId);
     toast('Payment entry deleted');
@@ -1675,8 +1724,71 @@ document.getElementById('rentSearch').addEventListener('input',renderRentList);
 
 /* ===================== RENT VIEW / LEDGER ===================== */
 let currentRentId=null;
+/* ---- History modules (Tenant monthly rent + Property tax/account payments): one closed line -> opens table with Add / Edit / Delete / Close.
+        While one is open the rest of that screen is locked until Close. ---- */
+let rentMod={open:false,sel:null}, taxMod={prop:null,sel:null};
+function hxMoney(n){ return (n<0?'-':'')+'₹'+(Math.round(Math.abs(n)*100)/100); }
+['propViewBody','rentViewBody'].forEach(function(id){
+  document.getElementById(id).addEventListener('click',function(e){
+    const isOpen = (id==='propViewBody') ? (taxMod.prop!==null) : rentMod.open;
+    if(!isOpen) return;
+    const t=e.target.closest('button,[onclick]');
+    if(!t || t.closest('.hx-mod')) return;
+    e.stopPropagation(); e.preventDefault(); toast('Close the history first');
+  }, true);
+});
+/* Tenant */
+function rentModToggle(){ rentMod={open:!rentMod.open, sel:null}; renderRentViewBody(); }
+function rentModSelect(idx){
+  rentMod.sel=(rentMod.sel===idx)?null:idx;
+  document.querySelectorAll('#rentViewBody .hx-row').forEach(function(tr){ tr.classList.toggle('sel', Number(tr.dataset.i)===rentMod.sel); });
+  const e=document.getElementById('rentModEdit'), d=document.getElementById('rentModDel');
+  if(e) e.disabled=(rentMod.sel===null); if(d) d.disabled=(rentMod.sel===null);
+}
+function rentModEdit(){ if(rentMod.sel!==null) leOpen(rentMod.sel); }
+function rentModDelete(){ if(rentMod.sel!==null) deleteLedgerRow(rentMod.sel); }
+function leOpen(idx){
+  const r=loadRents().find(x=>x.id===currentRentId); const row=r&&r.ledger[idx]; if(!row) return;
+  document.getElementById('leIdx').value=idx;
+  document.getElementById('leDue').value=row.dueDate||'';
+  document.getElementById('leRent').value=row.amount;
+  document.getElementById('lePaid').value=row.paidDate||'';
+  document.getElementById('lePaidAmt').value=row.paidAmount||0;
+  document.getElementById('leType').value=row.paymentType||'Cash';
+  document.getElementById('leNote').value=row.note||'';
+  openModalEl('leBg');
+}
+function leSave(){
+  const idx=Number(document.getElementById('leIdx').value);
+  const due=dvParse(document.getElementById('leDue').value,{required:true});
+  if(!due.ok){ toast('Due Date: '+due.msg, true); return; }
+  const pd=dvParse(document.getElementById('lePaid').value,{required:false,noFuture:true});
+  if(!pd.ok){ toast('Paid Date: '+pd.msg, true); return; }
+  const rent=document.getElementById('leRent').value.trim();
+  if(rent==='' || !(parseFloat(rent)>=0)){ toast('Enter the Rent amount', true); return; }
+  let paidAmt=document.getElementById('lePaidAmt').value.trim();
+  const hasDate=String(pd.value||'').trim().length>0;
+  if(parseFloat(paidAmt)>0 && !hasDate){ toast('Enter the Paid Date first before entering a Paid Amount', true); return; }
+  if(!hasDate) paidAmt=0; else if(!(parseFloat(paidAmt)>0)) paidAmt=rent;   // a Paid Date with no amount = full Rent, as before
+  let rents=loadRents(); const r=rents.find(x=>x.id===currentRentId); const row=r&&r.ledger[idx]; if(!row) return;
+  row.dueDate=due.value; row.amount=rent; row.paidDate=pd.value||''; row.paidAmount=paidAmt;
+  row.paymentType=document.getElementById('leType').value; row.note=document.getElementById('leNote').value.trim();
+  if(!saveRents(rents)) return;
+  closeModal('leBg'); renderRentViewBody(); renderRentList(); toast('Month saved');
+}
+/* Property */
+function taxModToggle(propId){ taxMod=(taxMod.prop===propId)?{prop:null,sel:null}:{prop:propId,sel:null}; viewProperty(propId); }
+function taxModSelect(payId){
+  taxMod.sel=(taxMod.sel===payId)?null:payId;
+  document.querySelectorAll('#propViewBody .hx-row').forEach(function(tr){ tr.classList.toggle('sel', tr.dataset.id===taxMod.sel); });
+  const e=document.getElementById('taxModEdit'), d=document.getElementById('taxModDel');
+  if(e) e.disabled=!taxMod.sel; if(d) d.disabled=!taxMod.sel;
+}
+function taxModEdit(propId){ if(taxMod.sel) openTaxPay(propId, taxMod.sel); }
+function taxModDelete(propId){ if(taxMod.sel) deleteTaxPayment(propId, taxMod.sel); }
 function viewRent(id){
   currentRentId=id;
+  rentMod={open:false,sel:null};
   renderRentViewBody();
   openModalEl('rentViewBg');
 }
@@ -1687,23 +1799,15 @@ function renderRentViewBody(){
   document.getElementById('rentViewTitle').textContent=r.tenantName;
   const matChips=(r.materialsGiven||[]).map(m=>`<span class="chip">${esc(m.name)} × ${esc(m.qty)}</span>`).join('') || '<span class="sub">None</span>';
   const fileChips=(r.files||[]).map((f,i)=>`<span class="chip" style="cursor:pointer" onclick="openTenantFile('${r.id}',${i})">📎 ${esc(f.name.slice(0,16))} ⤢</span>`).join('') || '<span class="sub">None</span>';
-  const ledgerRows=(r.ledger||[]).map((row,idx)=>{
-    const bal=(parseFloat(row.amount)||0)-(parseFloat(row.paidAmount)||0);
-    const hasNote = row.note && row.note.trim();
-    const dateSet = (row.paidDate||'').trim().length>0;
-    return `
-    <tr>
-      <td><input type="text" id="ldgDue_${idx}" readonly value="${esc(row.dueDate)}" onclick="openDatePicker(this.id,event)" onchange="updateLedgerField(${idx},'dueDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
-      <td><input type="number" value="${row.amount}" onchange="updateLedgerField(${idx},'amount',this.value)" style="width:80px"></td>
-      <td><input type="text" id="ldgPaid_${idx}" readonly value="${esc(row.paidDate||'')}" onclick="openDatePicker(this.id,event)" onchange="updateLedgerField(${idx},'paidDate',this.value)" placeholder="DD-MM-YYYY" style="width:90px"></td>
-      <td><input type="number" value="${row.paidAmount||0}" onchange="updateLedgerField(${idx},'paidAmount',this.value)" style="width:80px${dateSet?'':';background:#EDEBE4;color:#999'}" ${dateSet?'':'disabled title="Set Paid Date first"'}></td>
-      <td><select onchange="updateLedgerField(${idx},'paymentType',this.value)">
-        ${['Cash','UPI','Bank'].map(t=>`<option ${row.paymentType===t?'selected':''}>${esc(t)}</option>`).join('')}
-      </select></td>
-      <td style="font-weight:700;color:${bal>0?'#8C2F2F':'#1e3a8a'}">₹${bal.toFixed(2)}</td>
-      <td><span onclick="openNoteEditor(${idx})" style="cursor:pointer;color:${hasNote?'#1e3a8a':'#B7B7AC'};font-size:15px" title="Note">📝</span></td>
-      <td><span class="x" style="cursor:pointer;color:#8C2F2F" onclick="deleteLedgerRow(${idx})">✕</span></td>
-    </tr>`;}).join('') || '<tr><td colspan="8" class="sub">No ledger rows yet — tap "Add Month" below</td></tr>';
+  const ledgerRowsHtml=(r.ledger||[]).map((row,idx)=>{
+    const amt=parseFloat(row.amount)||0, got=parseFloat(row.paidAmount)||0, bal=amt-got;
+    return `<tr class="hx-row${rentMod.sel===idx?' sel':''}" data-i="${idx}" onclick="rentModSelect(${idx})"><td>${esc(row.dueDate||'-')}</td><td>${hxMoney(amt)}</td><td>${hxMoney(got)}</td><td style="color:${bal>0?'#8C2F2F':'#1e3a8a'};font-weight:700">${hxMoney(bal)}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" class="sub">No months added yet</td></tr>';
+  const ledgerModule=`<div class="hx-mod">
+    <div class="hx-head" onclick="rentModToggle()"><span class="hx-arrow">${rentMod.open?'▾':'▸'}</span><b>Monthly Rent History</b><span class="sub" style="margin-left:auto">Rent ₹${esc(r.monthlyRent)} / month</span></div>
+    ${rentMod.open?`<div class="hx-mod-body"><table class="led"><tr><th>Due Date</th><th>Rent</th><th>Received</th><th>Due</th></tr>${ledgerRowsHtml}</table>
+      <div class="hx-btns"><button class="btn small" onclick="addLedgerRow()">Add Month</button><button class="btn small secondary" id="rentModEdit" onclick="rentModEdit()" ${rentMod.sel===null?'disabled':''}>Edit</button><button class="btn small danger" id="rentModDel" onclick="rentModDelete()" ${rentMod.sel===null?'disabled':''}>Delete</button><button class="btn small secondary" onclick="rentModToggle()">Close</button></div></div>`:''}
+  </div>`;
 
   document.getElementById('rentViewBody').innerHTML = `
     <div class="sub">${esc(p?p.name:'(property removed)')} — ${esc(p?p.address:'')}</div>
@@ -1721,14 +1825,7 @@ function renderRentViewBody(){
     <h3>Uploaded Files</h3><div class="chiplist">${fileChips}</div>
     ${r.remarks?`<h3>Remarks</h3><div class="sub">${esc(r.remarks)}</div>`:''}
 
-    <h3>Monthly Rent History</h3>
-    <div style="overflow-x:auto">
-    <table class="led">
-      <tr><th>Due Date</th><th>Rent</th><th>Paid Date</th><th>Paid Amount</th><th>Type</th><th>Balance</th><th></th><th></th></tr>
-      ${ledgerRows}
-    </table>
-    </div>
-    <button class="btn small secondary" style="margin-top:8px" onclick="addLedgerRow()">+ Add Month</button>
+    ${ledgerModule}
 
     <h3>Actions</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1759,7 +1856,9 @@ function addLedgerRow(){
   const newRow={id:uid(), dueDate:(r.dueDate||todayDMY()), amount:(prevBalance+rent).toFixed(2), paidAmount:0, paidDate:'', paymentType:'Cash', note:''};
   r.ledger.push(newRow);
   if(!saveRents(rents)) return;
+  rentMod={open:true, sel:r.ledger.length-1};   // keep the module open and fill in the new month
   renderRentViewBody();
+  leOpen(r.ledger.length-1);
   renderRentList();
 }
 let noteRowIdx=null;
@@ -1802,6 +1901,7 @@ function deleteLedgerRow(idx){
     let rents=loadRents();
     const r=rents.find(x=>x.id===currentRentId);
     r.ledger.splice(idx,1);
+    rentMod.sel=null;
     if(!saveRents(rents)) return;
     renderRentViewBody();
     renderRentList();
