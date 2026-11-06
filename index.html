@@ -125,6 +125,8 @@ main{padding:16px;max-width:1100px;margin:0 auto}
 .hx-mod-body{border-top:1px solid var(--line);padding:10px 12px}
 .hx-row{cursor:pointer}
 .hx-row.sel td{background:var(--brand-lt)}
+.hx-search{display:flex;gap:8px;margin-bottom:8px}
+.hx-search input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px}
 .hx-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .hx-btns .btn:disabled{opacity:.45;cursor:not-allowed}
 table.led{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
@@ -1089,13 +1091,13 @@ function viewProperty(id){
   const merged = getMergedTaxNumbers(p);
   const taxNumLines = merged.map(t=>`<div><b>${esc(t.type)}:</b> ${esc(t.number)}${t.inherited?' <span class="sub">(from Main)</span>':''}</div>`).join('') || '<div class="sub">None added yet</div>';
   const isSold = p.status==='Sold';
-  const taxList=(p.taxPayments||[]).slice().reverse();
   const taxIsOpen=(taxMod.prop===p.id);
-  const taxRowsHtml=taxList.map(t=>`<tr class="hx-row${taxMod.sel===t.id?' sel':''}" data-id="${t.id}" onclick="taxModSelect('${t.id}')"><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td>${esc(t.refNo||'-')}</td><td>₹${esc(t.amount)}</td><td>${esc(t.mode)}</td><td>${esc(t.receipt||'-')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">No payments recorded</td></tr>';
   const taxModule=`<div class="hx-mod">
     <div class="hx-head" onclick="taxModToggle('${p.id}')"><span class="hx-arrow">${taxIsOpen?'▾':'▸'}</span><b>Tax / Account Payment History</b></div>
-    ${taxIsOpen?`<div class="hx-mod-body"><div style="overflow-x:auto"><table class="led"><tr><th>Date</th><th>Type</th><th>Ref No.</th><th>Amount</th><th>Mode</th><th>Receipt</th></tr>${taxRowsHtml}</table></div>
-      <div class="hx-btns">${isSold?'':`<button class="btn small" onclick="openTaxPay('${p.id}')">Add</button><button class="btn small secondary" id="taxModEdit" onclick="taxModEdit('${p.id}')" ${taxMod.sel?'':'disabled'}>Edit</button><button class="btn small danger" id="taxModDel" onclick="taxModDelete('${p.id}')" ${taxMod.sel?'':'disabled'}>Delete</button>`}<button class="btn small secondary" onclick="taxModToggle('${p.id}')">Close</button></div></div>`:''}
+    ${taxIsOpen?`<div class="hx-mod-body">
+      ${taxMod.searching?`<div class="hx-search"><input type="text" id="taxModQ" placeholder="e.g. Property Tax, 2025, Ref No" value="${esc(taxMod.q||'')}" oninput="taxModSearch(this.value)"></div>`:''}
+      <div id="taxModList">${taxModListHtml(p)}</div>
+      <div class="hx-btns">${isSold?'':`<button class="btn small" onclick="openTaxPay('${p.id}')">Add</button><button class="btn small secondary" id="taxModEdit" onclick="taxModEdit('${p.id}')" ${taxMod.sel?'':'disabled'}>Edit</button><button class="btn small danger" id="taxModDel" onclick="taxModDelete('${p.id}')" ${taxMod.sel?'':'disabled'}>Delete</button>`}<button class="btn small secondary" onclick="taxModSearchToggle('${p.id}')">${taxMod.searching?'Clear Search':'Search'}</button><button class="btn small secondary" onclick="taxModToggle('${p.id}')">Close</button></div></div>`:''}
   </div>`;
   const rentRows=rents.map(r=>`<tr><td>${esc(r.tenantName)}</td><td>${r.status}</td><td>₹${esc(r.monthlyRent)}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">No tenant history</td></tr>';
   const materials=(p.materials||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('') || '<span class="sub">None</span>';
@@ -1729,6 +1731,14 @@ let currentRentId=null;
         While one is open the rest of that screen is locked until Close. ---- */
 let rentMod={open:false,sel:null}, taxMod={prop:null,sel:null};
 function hxMoney(n){ return (n<0?'-':'')+'₹'+(Math.round(Math.abs(n)*100)/100); }
+/* Search helpers shared by both history modules: lower-case, tolerant of "November 26", "Nov 2026", "11-2026", "2025" */
+function hxNorm(q){ return String(q||'').toLowerCase().trim().replace(/[\/.]/g,'-').replace(/\s+/g,' '); }
+function hxDateKeys(dmy){
+  const d=dmyToDate(dmy); if(!d) return String(dmy||'').toLowerCase();
+  const M=['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const mo=M[d.getMonth()], y=String(d.getFullYear()), yy=y.slice(2), mm=String(d.getMonth()+1).padStart(2,'0');
+  return [dmy, mm+'-'+y, mm+'-'+yy, mo+' '+y, mo.slice(0,3)+' '+y, mo+' '+yy, mo.slice(0,3)+' '+yy, y].join(' | ').toLowerCase();
+}
 /* Rent column of a month = the rent only (carried previous due is NOT part of it). New rows store `rent`; older rows fall back to the monthly rent. */
 function hxRentPart(r,row,idx){
   if(row.rent!==undefined && row.rent!=='' && !isNaN(parseFloat(row.rent))) return parseFloat(row.rent);
@@ -1744,7 +1754,39 @@ function hxRentPart(r,row,idx){
   }, true);
 });
 /* Tenant */
-function rentModToggle(){ rentMod={open:!rentMod.open, sel:null}; renderRentViewBody(); }
+function rentModToggle(){ rentMod={open:!rentMod.open, sel:null, q:'', searching:false}; renderRentViewBody(); }
+/* default = latest 3 months (newest first); a search shows every matching month */
+function rentModVisible(r){
+  const led=r.ledger||[], q=hxNorm(rentMod.q||'');
+  let idxs=led.map((_,i)=>i).reverse();
+  if(!q) return {idxs:idxs.slice(0,3), total:led.length, filtered:false};
+  idxs=idxs.filter(function(i){ const row=led[i]; return (hxDateKeys(row.dueDate)+' | '+hxDateKeys(row.paidDate)+' | '+String(row.note||'').toLowerCase()).includes(q); });
+  return {idxs:idxs, total:led.length, filtered:true};
+}
+function rentModListHtml(r){
+  const v=rentModVisible(r), led=r.ledger||[];
+  const rows=v.idxs.map(function(idx){
+    const row=led[idx], amt=parseFloat(row.amount)||0, got=parseFloat(row.paidAmount)||0, bal=amt-got;
+    const sel=rentMod.sel===idx?' sel':'';
+    return `<tr class="hx-row${sel}" data-i="${idx}" onclick="rentModSelect(${idx})"><td style="border-bottom:none;padding-bottom:0">${esc(row.dueDate||'-')}</td><td style="border-bottom:none;padding-bottom:0">${hxMoney(hxRentPart(r,row,idx))}</td><td style="border-bottom:none;padding-bottom:0">Received ${hxMoney(got)}</td></tr>
+      <tr class="hx-row${sel}" data-i="${idx}" onclick="rentModSelect(${idx})"><td colspan="3" style="padding-top:2px;color:${bal>0?'#8C2F2F':'#1e3a8a'};font-weight:700">Due ${hxMoney(bal)}</td></tr>`;
+  }).join('') || '<tr><td colspan="3" class="sub">'+(v.filtered?'No months match':'No months added yet')+'</td></tr>';
+  const note = v.filtered ? (v.idxs.length+' of '+v.total+' months match') : (v.total>3 ? 'Showing latest 3 of '+v.total+' months. Use Search for older months.' : '');
+  return `<table class="led"><tr><th>Due Date</th><th>Rent</th><th>Received</th></tr>${rows}</table>${note?`<div class="sub" style="margin-top:6px">${note}</div>`:''}`;
+}
+function rentModSearchToggle(){
+  rentMod.searching=!rentMod.searching; if(!rentMod.searching) rentMod.q='';
+  rentMod.sel=null; renderRentViewBody();
+  const i=document.getElementById('rentModQ'); if(i) i.focus();
+}
+function rentModSearch(val){
+  rentMod.q=val;
+  const r=loadRents().find(x=>x.id===currentRentId); if(!r) return;
+  if(rentMod.sel!==null && !rentModVisible(r).idxs.includes(rentMod.sel)) rentMod.sel=null;
+  document.getElementById('rentModList').innerHTML=rentModListHtml(r);
+  const e=document.getElementById('rentModEdit'), d=document.getElementById('rentModDel');
+  if(e) e.disabled=(rentMod.sel===null); if(d) d.disabled=(rentMod.sel===null);
+}
 function rentModSelect(idx){
   rentMod.sel=(rentMod.sel===idx)?null:idx;
   document.querySelectorAll('#rentViewBody .hx-row').forEach(function(tr){ tr.classList.toggle('sel', Number(tr.dataset.i)===rentMod.sel); });
@@ -1787,7 +1829,37 @@ function leSave(){
   closeModal('leBg'); renderRentViewBody(); renderRentList(); toast('Month saved');
 }
 /* Property */
-function taxModToggle(propId){ taxMod=(taxMod.prop===propId)?{prop:null,sel:null}:{prop:propId,sel:null}; viewProperty(propId); }
+function taxModToggle(propId){ taxMod=(taxMod.prop===propId)?{prop:null,sel:null,q:'',searching:false}:{prop:propId,sel:null,q:'',searching:false}; viewProperty(propId); }
+/* default = the last paid entry of each Type; a search shows every matching payment, newest first */
+function taxModVisible(p){
+  const pays=p.taxPayments||[], q=hxNorm(taxMod.q||'');
+  if(!q){
+    const last={}; pays.forEach(function(t,i){ last[t.type]={t:t,i:i}; });
+    const list=Object.keys(last).map(k=>last[k]).sort(function(a,b){ const da=dmyToDate(a.t.date), db=dmyToDate(b.t.date); return ((db?db.getTime():0)-(da?da.getTime():0)) || (b.i-a.i); }).map(x=>x.t);
+    return {list:list, total:pays.length, filtered:false};
+  }
+  const list=pays.slice().reverse().filter(function(t){ return (String(t.type||'')+' | '+String(t.refNo||'')+' | '+String(t.mode||'')+' | '+String(t.receipt||'')+' | '+String(t.amount||'')+' | '+hxDateKeys(t.date)).toLowerCase().includes(q); });
+  return {list:list, total:pays.length, filtered:true};
+}
+function taxModListHtml(p){
+  const v=taxModVisible(p);
+  const rows=v.list.map(t=>`<tr class="hx-row${taxMod.sel===t.id?' sel':''}" data-id="${t.id}" onclick="taxModSelect('${t.id}')"><td>${esc(t.date)}</td><td>${esc(t.type)}</td><td>${esc(t.refNo||'-')}</td><td>₹${esc(t.amount)}</td><td>${esc(t.mode)}</td><td>${esc(t.receipt||'-')}</td></tr>`).join('') || '<tr><td colspan="6" class="sub">'+(v.filtered?'No payments match':'No payments recorded')+'</td></tr>';
+  const note = v.filtered ? (v.list.length+' of '+v.total+' payments match') : (v.total>v.list.length ? 'Showing the last paid of each Type ('+v.list.length+' of '+v.total+' entries). Use Search for all entries.' : '');
+  return `<div style="overflow-x:auto"><table class="led"><tr><th>Date</th><th>Type</th><th>Ref No.</th><th>Amount</th><th>Mode</th><th>Receipt</th></tr>${rows}</table></div>${note?`<div class="sub" style="margin-top:6px">${note}</div>`:''}`;
+}
+function taxModSearchToggle(propId){
+  taxMod.searching=!taxMod.searching; if(!taxMod.searching) taxMod.q='';
+  taxMod.sel=null; viewProperty(propId);
+  const i=document.getElementById('taxModQ'); if(i) i.focus();
+}
+function taxModSearch(val){
+  taxMod.q=val;
+  const p=loadProps().find(x=>x.id===taxMod.prop); if(!p) return;
+  if(taxMod.sel && !taxModVisible(p).list.some(t=>t.id===taxMod.sel)) taxMod.sel=null;
+  document.getElementById('taxModList').innerHTML=taxModListHtml(p);
+  const e=document.getElementById('taxModEdit'), d=document.getElementById('taxModDel');
+  if(e) e.disabled=!taxMod.sel; if(d) d.disabled=!taxMod.sel;
+}
 function taxModSelect(payId){
   taxMod.sel=(taxMod.sel===payId)?null:payId;
   document.querySelectorAll('#propViewBody .hx-row').forEach(function(tr){ tr.classList.toggle('sel', tr.dataset.id===taxMod.sel); });
@@ -1809,16 +1881,12 @@ function renderRentViewBody(){
   document.getElementById('rentViewTitle').textContent=r.tenantName;
   const matChips=(r.materialsGiven||[]).map(m=>`<span class="chip">${esc(m.name)} × ${esc(m.qty)}</span>`).join('') || '<span class="sub">None</span>';
   const fileChips=(r.files||[]).map((f,i)=>`<span class="chip" style="cursor:pointer" onclick="openTenantFile('${r.id}',${i})">📎 ${esc(f.name.slice(0,16))} ⤢</span>`).join('') || '<span class="sub">None</span>';
-  const ledgerRowsHtml=(r.ledger||[]).map((row,idx)=>{
-    const amt=parseFloat(row.amount)||0, got=parseFloat(row.paidAmount)||0, bal=amt-got;
-    const sel=rentMod.sel===idx?' sel':'';
-    return `<tr class="hx-row${sel}" data-i="${idx}" onclick="rentModSelect(${idx})"><td style="border-bottom:none;padding-bottom:0">${esc(row.dueDate||'-')}</td><td style="border-bottom:none;padding-bottom:0">${hxMoney(hxRentPart(r,row,idx))}</td><td style="border-bottom:none;padding-bottom:0">Received ${hxMoney(got)}</td></tr>
-      <tr class="hx-row${sel}" data-i="${idx}" onclick="rentModSelect(${idx})"><td colspan="3" style="padding-top:2px;color:${bal>0?'#8C2F2F':'#1e3a8a'};font-weight:700">Due ${hxMoney(bal)}</td></tr>`;
-  }).join('') || '<tr><td colspan="3" class="sub">No months added yet</td></tr>';
   const ledgerModule=`<div class="hx-mod">
     <div class="hx-head" onclick="rentModToggle()"><span class="hx-arrow">${rentMod.open?'▾':'▸'}</span><b>Monthly Rent History</b><span class="sub" style="margin-left:auto">Rent ₹${esc(r.monthlyRent)} / month</span></div>
-    ${rentMod.open?`<div class="hx-mod-body"><table class="led"><tr><th>Due Date</th><th>Rent</th><th>Received</th></tr>${ledgerRowsHtml}</table>
-      <div class="hx-btns"><button class="btn small" onclick="addLedgerRow()">Add Month</button><button class="btn small secondary" id="rentModEdit" onclick="rentModEdit()" ${rentMod.sel===null?'disabled':''}>Edit</button><button class="btn small danger" id="rentModDel" onclick="rentModDelete()" ${rentMod.sel===null?'disabled':''}>Delete</button><button class="btn small secondary" onclick="rentModToggle()">Close</button></div></div>`:''}
+    ${rentMod.open?`<div class="hx-mod-body">
+      ${rentMod.searching?`<div class="hx-search"><input type="text" id="rentModQ" placeholder="e.g. November 26, Nov 2026, 2025" value="${esc(rentMod.q||'')}" oninput="rentModSearch(this.value)"></div>`:''}
+      <div id="rentModList">${rentModListHtml(r)}</div>
+      <div class="hx-btns"><button class="btn small" onclick="addLedgerRow()">Add Month</button><button class="btn small secondary" id="rentModEdit" onclick="rentModEdit()" ${rentMod.sel===null?'disabled':''}>Edit</button><button class="btn small danger" id="rentModDel" onclick="rentModDelete()" ${rentMod.sel===null?'disabled':''}>Delete</button><button class="btn small secondary" onclick="rentModSearchToggle()">${rentMod.searching?'Clear Search':'Search'}</button><button class="btn small secondary" onclick="rentModToggle()">Close</button></div></div>`:''}
   </div>`;
 
   document.getElementById('rentViewBody').innerHTML = `
