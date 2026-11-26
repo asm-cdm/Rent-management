@@ -3373,6 +3373,11 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
     y+=rowH;
   }
   pdfHeader(doc,pageTitle); startPage(true);
+  const coverNote={};   // portion id -> "Main House (Tenant)" for every tenancy that includes this portion's rent
+  { const allP=loadProps(); rents.forEach(function(t){ (t.coversIds||[]).forEach(function(cid){
+      const mp=allP.find(z=>z.id===t.propertyId); const txt=(mp?mp.name:'Main property')+' ('+t.tenantName+')';
+      coverNote[cid]=coverNote[cid]||[]; if(!coverNote[cid].includes(txt)) coverNote[cid].push(txt);
+    }); }); Object.keys(coverNote).forEach(k=>{ coverNote[k]=coverNote[k].join(', '); }); }
   props.forEach(function(p){
     const c=rpCollect(p,rents,from,effTo);
     if(y+34>limit()) startPage(false);
@@ -3380,7 +3385,9 @@ function buildPropertyStatementPdf(scopeIds,scopeLabel,from,to,fromTxt,toTxt){
     doc.text(fitText(doc,p.name,totalW),x,y+4);
     doc.setFont(undefined,'normal'); doc.setFontSize(9); doc.setTextColor(110,110,110);
     doc.text(p.ownOccupation?'Own':'Rent',x,y+9); doc.setTextColor(0,0,0);
-    y+=12; head();
+    const cn=coverNote[p.id];   // a portion whose rent is included in the main property's tenancy
+    if(cn){ doc.setFont(undefined,'italic'); doc.setFontSize(8.5); doc.setTextColor(30,58,138); doc.text(fitText(doc,'Rent included in '+cn,totalW),x,y+13.5); doc.setFont(undefined,'normal'); doc.setTextColor(0,0,0); }
+    y+=cn?17:12; head();
     const sections=[['Rent Income',c.income,RP_BLUE,1],['Expenses',c.expense,RP_RED,-1]];
     let net=0, count=0;
     sections.forEach(function(sec){
