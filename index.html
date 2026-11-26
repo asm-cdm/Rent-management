@@ -401,7 +401,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
     <button type="button" class="btn secondary" id="propTaxNumOpenBtn" onclick="taxNumOpen()">Tax / Account Numbers (0)</button>
     <button type="button" class="btn secondary" id="propMatOpenBtn" onclick="matOpen()">Property Materials (0)</button>
   </div>
-  <p class="sub" id="propLinkedNote" style="display:none">Any Type not listed above is automatically inherited from the Main property's own list. Add a Type here only when this portion needs its own separate number for it.</p>
+  <p class="sub" id="propLinkedNote" style="display:none">Tax and Water are managed in the main property. Entries already saved here stay, but they are view-only.</p>
 
   <div class="modal-actions">
     <button class="btn secondary" onclick="closeModal('propModalBg')">Cancel</button>
@@ -412,7 +412,9 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
 <!-- ============ TAX / ACCOUNT NUMBERS POPUP (opened from Property form) ============ -->
 <div class="modal-bg" id="taxNumBg" style="z-index:55"><div class="modal" style="max-width:420px">
   <h2>Tax / Account Numbers</h2>
+  <div class="sub" id="taxNumLinkedNote" style="display:none;margin-bottom:8px">Tax and Water are managed in the main property. These entries are view-only.</div>
   <div id="taxNumList"></div>
+  <div id="taxNumFormWrap">
   <h3 id="taxNumFormTitle">Add Entry</h3>
   <div class="field"><label>Type</label>
     <div class="searchsel"><input type="text" id="propTaxNumTypeSearch" placeholder="Type..." oninput="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')" onfocus="filterTypeOptsGeneric('propTaxNumTypeSearch','propTaxNumType','propTaxNumTypeOpts')">
@@ -425,11 +427,10 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
   <div class="field"><label>Ass. Number</label><input type="text" id="propTaxNumValue"></div>
   <div class="modal-actions" style="justify-content:space-between">
     <button class="btn secondary" onclick="taxNumClearForm()">Clear</button>
-    <div style="display:flex;gap:8px">
-      <button class="btn" id="taxNumSaveBtn" onclick="taxNumSave()">Add</button>
-      <button class="btn secondary" onclick="taxNumClose()">Close</button>
-    </div>
+    <button class="btn" id="taxNumSaveBtn" onclick="taxNumSave()">Add</button>
   </div>
+  </div>
+  <div class="modal-actions" style="justify-content:flex-end"><button class="btn secondary" onclick="taxNumClose()">Close</button></div>
 </div></div>
 
 <!-- ============ PROPERTY MATERIALS POPUP (opened from Property form) ============ -->
@@ -560,6 +561,10 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
       <div class="opts" id="rentPropOpts"></div>
     </div>
     <div class="sub" id="rentPropInfo" style="margin-top:6px"></div>
+  </div>
+  <div class="field" id="rentCoversWrap" style="display:none"><label>Also covers (linked portions)</label>
+    <div id="rentCoversList"></div>
+    <div class="sub">A covered portion shares this tenant's rent account - it has no separate rent / due account.</div>
   </div>
   <div class="field"><label>Tenant Name <span class="req">*</span></label><input type="text" id="rentTenantName"></div>
   <div class="field"><label>Permanent Address</label><textarea id="rentTenantAddr"></textarea></div>
@@ -840,6 +845,7 @@ function togglePropLinked(){
   const isLinked = document.getElementById('propIsLinked').value==='yes';
   document.getElementById('propLinkedMainWrap').style.display = isLinked?'block':'none';
   document.getElementById('propLinkedNote').style.display = isLinked?'block':'none';
+  if(typeof propSecCounts==='function') propSecCounts();
 }
 function filterMainPropOpts(){
   const q=document.getElementById('propMainSearch').value.toLowerCase();
@@ -895,17 +901,23 @@ function openPropertyForm(id){
    Both work on the Property form's working lists (editPropTaxNumbers / editPropMaterials) - nothing is saved until "Save Property".
    Tax entry:  {id, type, number (= Ass. Number, used everywhere in PDFs), ward, oldNumber}
    Material:   {id, name (= Item, also used by Rent "Materials Given"), qty, place, remarks}   */
-let taxNumEditId=null, matEditId=null;
+let taxNumEditId=null, matEditId=null, taxNumReadOnly=false;
+function propFormLinked(){ const e=document.getElementById('propIsLinked'); return !!e && e.value==='yes'; }
 function propSecCounts(){
   const a=document.getElementById('propTaxNumOpenBtn'), b=document.getElementById('propMatOpenBtn');
-  if(a) a.textContent='Tax / Account Numbers ('+editPropTaxNumbers.length+')';
+  if(a) a.textContent='Tax / Account Numbers ('+editPropTaxNumbers.length+')'+(propFormLinked()?' - view only':'');
   if(b) b.textContent='Property Materials ('+editPropMaterials.length+')';
 }
 function renderPropTaxNumChips(){ propSecCounts(); }
 function renderPropMaterialsChips(){ propSecCounts(); }
 
 /* ---- Tax / Account Numbers ---- */
-function taxNumOpen(){ taxNumClearForm(); taxNumRender(); openModalEl('taxNumBg'); }
+function taxNumOpen(){
+  taxNumReadOnly=propFormLinked();   // a linked portion only VIEWS what is already saved; tax/water are managed in the main property
+  document.getElementById('taxNumFormWrap').style.display=taxNumReadOnly?'none':'block';
+  document.getElementById('taxNumLinkedNote').style.display=taxNumReadOnly?'block':'none';
+  taxNumClearForm(); taxNumRender(); openModalEl('taxNumBg');
+}
 function taxNumClose(){ closeModal('taxNumBg'); propSecCounts(); }
 function taxNumClearForm(){
   taxNumEditId=null;
@@ -918,11 +930,12 @@ function taxNumRender(){
   document.getElementById('taxNumList').innerHTML = editPropTaxNumbers.map(function(t){
     const bits=[]; if(t.ward) bits.push('Ward: '+esc(t.ward)); if(t.oldNumber) bits.push('Old Ass. No: '+esc(t.oldNumber)); bits.push('Ass. No: '+esc(t.number||'-'));
     return `<div class="sec-item"><div class="sec-main"><b>${esc(t.type)}</b>${bits.join(' &nbsp;|&nbsp; ')}</div>
-      <button class="btn small secondary" onclick="taxNumEdit('${t.id}')">Edit</button>
-      <button class="btn small danger" onclick="taxNumDelete('${t.id}')">Delete</button></div>`;
+      ${taxNumReadOnly?'':`<button class="btn small secondary" onclick="taxNumEdit('${t.id}')">Edit</button>
+      <button class="btn small danger" onclick="taxNumDelete('${t.id}')">Delete</button>`}</div>`;
   }).join('') || '<div class="sub" style="margin-bottom:8px">None added yet</div>';
 }
 function taxNumEdit(id){
+  if(taxNumReadOnly) return;
   const t=editPropTaxNumbers.find(x=>x.id===id); if(!t) return;
   taxNumEditId=id;
   document.getElementById('propTaxNumTypeSearch').value=t.type; document.getElementById('propTaxNumType').value=t.type;
@@ -932,6 +945,7 @@ function taxNumEdit(id){
   document.getElementById('taxNumSaveBtn').textContent='Update';
 }
 function taxNumSave(){
+  if(taxNumReadOnly) return;
   const type=document.getElementById('propTaxNumType').value;
   const ward=document.getElementById('propTaxNumWard').value.trim();
   const oldNumber=document.getElementById('propTaxNumOld').value.trim();
@@ -950,6 +964,7 @@ function taxNumSave(){
   taxNumClearForm(); taxNumRender(); propSecCounts();
 }
 function taxNumDelete(id){
+  if(taxNumReadOnly) return;
   askConfirm('Delete this Tax / Account Number entry?', function(){
     editPropTaxNumbers=editPropTaxNumbers.filter(t=>t.id!==id);
     if(taxNumEditId===id) taxNumClearForm();
@@ -1067,12 +1082,14 @@ function renderPropList(){
   props.sort((a,b)=>a.name.localeCompare(b.name));
   const el=document.getElementById('propList');
   if(!props.length){el.innerHTML='<div class="empty">No properties yet. Tap "+ Add Property" to start.</div>';return;}
+  const activeRentsForCover=loadRents().filter(r=>r.status==='Active');
   el.innerHTML = props.map(p=>`
     <div class="card clickable" onclick="viewProperty('${p.id}')">
       <div class="row1">
         <div class="name">${esc(p.name)}</div>
         <span class="badge ${p.status==='Sold'?'closed':'active'}">${p.status}</span>
         ${p.ownOccupation ? '<span class="badge amber">Own Occupation</span>' : ''}
+        ${(()=>{ const ct=activeRentsForCover.find(r=>(r.coversIds||[]).includes(p.id)); return ct?`<span class="badge amber">Let under: ${esc(ct.tenantName)}</span>`:''; })()}
       </div>
       <div class="sub">${esc(p.address)}</div>
       <div class="sub">${p.location?`📍 ${esc(p.location)} &nbsp;|&nbsp; `:''}EB: ${esc(p.ebNumber||'-')} &nbsp;|&nbsp; Materials: ${(p.materials||[]).length} ${p.linkedTo ? `&nbsp;|&nbsp; <span class="badge active">Portion of: ${esc((loadProps().find(x=>x.id===p.linkedTo)||{}).name||'(main removed)')}</span>` : ''}</div>
@@ -1090,14 +1107,18 @@ function viewProperty(id){
   const portions = loadProps().filter(x=>x.linkedTo===p.id);
   const merged = getMergedTaxNumbers(p);
   const taxNumLines = merged.map(t=>`<div><b>${esc(t.type)}:</b> ${esc(t.number)}${t.inherited?' <span class="sub">(from Main)</span>':''}</div>`).join('') || '<div class="sub">None added yet</div>';
+  const coverTenant = loadRents().find(r=>r.status==='Active' && (r.coversIds||[]).includes(p.id));
+  const coverMain = coverTenant ? loadProps().find(x=>x.id===coverTenant.propertyId) : null;
   const isSold = p.status==='Sold';
+  const readOnlyTax = isSold || !!p.linkedTo;   // Sold, or a linked portion: tax/water are recorded in the main property
   const taxIsOpen=(taxMod.prop===p.id);
   const taxModule=`<div class="hx-mod">
     <div class="hx-head" onclick="taxModToggle('${p.id}')"><span class="hx-arrow">${taxIsOpen?'▾':'▸'}</span><b>Tax / Account Payment History</b></div>
     ${taxIsOpen?`<div class="hx-mod-body">
       ${taxMod.searching?`<div class="hx-search"><input type="text" id="taxModQ" placeholder="e.g. Property Tax, 2025, Ref No" value="${esc(taxMod.q||'')}" oninput="taxModSearch(this.value)"></div>`:''}
       <div id="taxModList">${taxModListHtml(p)}</div>
-      <div class="hx-btns">${isSold?'':`<button class="btn small" onclick="openTaxPay('${p.id}')">Add</button><button class="btn small secondary" id="taxModEdit" onclick="taxModEdit('${p.id}')" ${taxMod.sel?'':'disabled'}>Edit</button><button class="btn small danger" id="taxModDel" onclick="taxModDelete('${p.id}')" ${taxMod.sel?'':'disabled'}>Delete</button>`}<button class="btn small secondary" onclick="taxModSearchToggle('${p.id}')">${taxMod.searching?'Clear Search':'Search'}</button><button class="btn small secondary" onclick="taxModToggle('${p.id}')">Close</button></div></div>`:''}
+      ${p.linkedTo?`<div class="sub" style="margin-top:6px">Tax and Water are managed in the main property${main?': <b>'+esc(main.name)+'</b>':''}. This history is view-only.</div>`:''}
+      <div class="hx-btns">${readOnlyTax?'':`<button class="btn small" onclick="openTaxPay('${p.id}')">Add</button><button class="btn small secondary" id="taxModEdit" onclick="taxModEdit('${p.id}')" ${taxMod.sel?'':'disabled'}>Edit</button><button class="btn small danger" id="taxModDel" onclick="taxModDelete('${p.id}')" ${taxMod.sel?'':'disabled'}>Delete</button>`}<button class="btn small secondary" onclick="taxModSearchToggle('${p.id}')">${taxMod.searching?'Clear Search':'Search'}</button><button class="btn small secondary" onclick="taxModToggle('${p.id}')">Close</button></div></div>`:''}
   </div>`;
   const rentRows=rents.map(r=>`<tr><td>${esc(r.tenantName)}</td><td>${r.status}</td><td>₹${esc(r.monthlyRent)}</td></tr>`).join('') || '<tr><td colspan="3" class="sub">No tenant history</td></tr>';
   const materials=(p.materials||[]).map(m=>`<span class="chip">${esc(m.name)}</span>`).join('') || '<span class="sub">None</span>';
@@ -1105,6 +1126,7 @@ function viewProperty(id){
     <div class="sub">${esc(p.address)}</div>
     ${p.ownOccupation ? `<div class="sub" style="margin-top:4px"><span class="badge amber">Own Occupation</span> — won't appear in Rent module</div>` : ''}
     ${main ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> Portion of <b>${esc(main.name)}</b> — Types not listed below are automatically inherited from it</div>` : ''}
+    ${coverTenant ? `<div class="sub" style="margin-top:4px"><b>Let under:</b> ${esc(coverTenant.tenantName)}${coverMain?' ('+esc(coverMain.name)+')':''} — no separate rent account</div>` : ''}
     ${portions.length ? `<div class="sub" style="margin-top:4px"><b>Linked:</b> This is the Main property. Portion(s): ${portions.map(x=>`<b>${esc(x.name)}</b>`).join(', ')}</div>` : ''}
     <div style="margin-top:10px"><b>EB Number:</b> ${esc(p.ebNumber||'-')}</div>
     <div class="grid2" style="margin-top:6px">${taxNumLines}</div>
@@ -1232,6 +1254,7 @@ document.addEventListener('keydown',function(e){
   } else if(e.key==='Escape'){ box.classList.remove('show'); }
 });
 function openTaxPay(propId, payId){
+  { const pp0=loadProps().find(x=>x.id===propId); if(pp0 && pp0.linkedTo){ toast('Tax and Water payments are recorded in the main property'); return; } }
   document.getElementById('taxPayPropId').value=propId;
   document.getElementById('taxPayEditId').value=payId||'';
   document.getElementById('taxPayTitle').textContent=payId?'Edit Tax / Account Payment':'Add Tax / Account Payment';
@@ -1484,7 +1507,7 @@ function confirmSold(){
 let editRentFiles=[], editRentMaterials=[], selectedRentProp=null;
 
 function openRentForm(id){
-  editRentFiles=[]; editRentMaterials=[]; selectedRentProp=null;
+  editRentFiles=[]; editRentMaterials=[]; selectedRentProp=null; editRentCovers=[];
   document.getElementById('rentId').value=id||'';
   document.getElementById('rentModalTitle').textContent = id? 'Edit Tenant':'Add Tenant';
   document.getElementById('rentPropSearch').value='';
@@ -1512,6 +1535,7 @@ function openRentForm(id){
     document.getElementById('rentRemarks').value=r.remarks||'';
     editRentFiles=[...(r.files||[])];
     editRentMaterials=[...(r.materialsGiven||[])];
+    editRentCovers=[...(r.coversIds||[])];
     showRentPropInfo(p);
   } else {
     ['rentTenantName','rentTenantAddr','rentMobile1','rentMobile2','rentAdvAmt','rentAdvDate','rentAdvNote','rentMonthly','rentDueDate','rentIdNo','rentRemarks'].forEach(f=>document.getElementById(f).value='');
@@ -1520,12 +1544,13 @@ function openRentForm(id){
   renderRentFileThumbs();
   renderRentMaterialsChips();
   populateRentMatSelect();
+  rentCoversRender();
   openModalEl('rentModalBg');
 }
 function filterPropOpts(){
   const q=document.getElementById('rentPropSearch').value.toLowerCase();
   const editingId=document.getElementById('rentId').value;
-  const occupiedIds=new Set(loadRents().filter(r=>r.status==='Active' && r.id!==editingId).map(r=>r.propertyId));
+  const occupiedIds=new Set(); loadRents().filter(r=>r.status==='Active' && r.id!==editingId).forEach(r=>{ occupiedIds.add(r.propertyId); (r.coversIds||[]).forEach(x=>occupiedIds.add(x)); });
   const props=loadProps().filter(p=>p.status!=='Sold' && !p.ownOccupation).filter(p=>!occupiedIds.has(p.id)).filter(p=>p.name.toLowerCase().includes(q));
   const box=document.getElementById('rentPropOpts');
   box.innerHTML = props.map(p=>`<div class="opt" onclick="selectRentProp('${p.id}')">${esc(p.name)}<div class="sm">${esc(p.address)}</div></div>`).join('') || '<div class="opt sub">No matching vacant properties</div>';
@@ -1538,13 +1563,48 @@ function selectRentProp(id){
   document.getElementById('rentPropId').value=id;
   document.getElementById('rentPropSearch').value=p.name;
   document.getElementById('rentPropOpts').classList.remove('show');
-  showRentPropInfo(p);
+  editRentCovers=[]; rentCoversRender();
   editRentMaterials=[]; renderRentMaterialsChips();
   populateRentMatSelect();
 }
+/* ===================== TENANT COVERS LINKED PORTIONS (isolated) =====================
+   One person renting the main property AND its linked portion(s): one tenant record, one rent, one due account.
+   r.coversIds = IDs of the linked portions it covers. EB numbers are only SHOWN (the tenant pays EB directly) - no EB amount enters the due. */
+let editRentCovers=[];
+function rentCoverOptions(mainId,editingRentId){
+  const active=loadRents().filter(r=>r.status==='Active' && r.id!==editingRentId);
+  return loadProps().filter(x=>x.linkedTo===mainId && x.status!=='Sold' && !x.ownOccupation).map(function(x){
+    const t=active.find(r=>r.propertyId===x.id) || active.find(r=>(r.coversIds||[]).includes(x.id));
+    return {p:x, busy:t?t.tenantName:null};
+  });
+}
+function rentCoversRender(){
+  const wrap=document.getElementById('rentCoversWrap'), list=document.getElementById('rentCoversList'), p=selectedRentProp;
+  if(!p){ wrap.style.display='none'; editRentCovers=[]; return; }
+  const opts=rentCoverOptions(p.id, document.getElementById('rentId').value);
+  if(!opts.length){ wrap.style.display='none'; editRentCovers=[]; showRentPropInfo(p); return; }
+  editRentCovers=editRentCovers.filter(id=>opts.some(o=>o.p.id===id && !o.busy));
+  wrap.style.display='block';
+  list.innerHTML=opts.map(o=>`<label style="display:flex;align-items:center;gap:8px;font-weight:400;margin:4px 0"><input type="checkbox" style="width:auto" ${o.busy?'disabled':''} ${editRentCovers.includes(o.p.id)?'checked':''} onchange="rentCoversToggle('${o.p.id}',this.checked)">${esc(o.p.name)}${o.busy?` <span class="sub">(let to ${esc(o.busy)})</span>`:''}</label>`).join('');
+  showRentPropInfo(p);
+}
+function rentCoversToggle(id,on){
+  editRentCovers = on ? Array.from(new Set(editRentCovers.concat([id]))) : editRentCovers.filter(x=>x!==id);
+  showRentPropInfo(selectedRentProp);
+}
+function rentCoveredProps(r){ return (r.coversIds||[]).map(id=>loadProps().find(x=>x.id===id)).filter(Boolean); }
+function rentCoversViewHtml(r,p){
+  const cov=rentCoveredProps(r);
+  if(!cov.length) return `<div><b>EB Number:</b> ${esc(p?p.ebNumber||'-':'-')}</div>`;
+  return `<div><b>EB Numbers:</b> ${esc(p?p.name:'-')} ${esc(p?p.ebNumber||'-':'-')}, ${cov.map(c=>esc(c.name)+' '+esc(c.ebNumber||'-')).join(', ')}</div>
+      <div><b>Covers (linked portions):</b> ${cov.map(c=>esc(c.name)).join(', ')}</div>`;
+}
+/* ===================== END TENANT COVERS ===================== */
 function showRentPropInfo(p){
   if(!p){document.getElementById('rentPropInfo').innerHTML='';return;}
-  document.getElementById('rentPropInfo').innerHTML=`EB Number: <b>${esc(p.ebNumber||'-')}</b> &nbsp;|&nbsp; Address: ${esc(p.address)}`;
+  const cov=(editRentCovers||[]).map(id=>loadProps().find(x=>x.id===id)).filter(Boolean);
+  const ebHtml = cov.length ? `EB Numbers: ${esc(p.name)} <b>${esc(p.ebNumber||'-')}</b>, ${cov.map(c=>esc(c.name)+' <b>'+esc(c.ebNumber||'-')+'</b>').join(', ')}` : `EB Number: <b>${esc(p.ebNumber||'-')}</b>`;
+  document.getElementById('rentPropInfo').innerHTML=`${ebHtml} &nbsp;|&nbsp; Address: ${esc(p.address)}`;
 }
 function populateRentMatSelect(){
   const sel=document.getElementById('rentMatSelect');
@@ -1625,6 +1685,11 @@ function saveRent(){
   let rents=loadRents();
   const occupiedByOther = rents.some(r=>r.propertyId===propId && r.status==='Active' && r.id!==id);
   if(occupiedByOther){ toast('This property already has an active tenant — vacate them first.', true); return; }
+  const coveredByOther = rents.find(r=>r.status==='Active' && r.id!==id && (r.coversIds||[]).includes(propId));
+  if(coveredByOther){ toast('This portion is already covered by '+coveredByOther.tenantName+'\'s tenancy.', true); return; }
+  const coverOpts=rentCoverOptions(propId,id);
+  const badCover=editRentCovers.find(cid=>{ const o=coverOpts.find(x=>x.p.id===cid); return !o || o.busy; });
+  if(badCover){ toast('A selected portion is not available - please re-check "Also covers".', true); return; }
   const propRec = loadProps().find(x=>x.id===propId);
   if(propRec && propRec.ownOccupation){ toast('This property is marked Own Occupation and cannot have a tenant.', true); return; }
   const existing = id ? rents.find(r=>r.id===id) : null;
@@ -1640,6 +1705,7 @@ function saveRent(){
     advanceNote: document.getElementById('rentAdvNote').value.trim(),
     monthlyRent: monthly,
     dueDate: dueDate,
+    coversIds: editRentCovers.slice(),
     idProofType: document.getElementById('rentIdType').value,
     idProofNo: document.getElementById('rentIdNo').value.trim(),
     files: editRentFiles,
@@ -1718,7 +1784,7 @@ function renderRentList(){
         <div class="name">${esc(r.tenantName)}</div>
         <span class="badge ${r.status==='Active'?'active':'closed'}">${r.status}</span>
       </div>
-      <div class="sub">${esc(p?p.name:'(property removed)')} &nbsp;|&nbsp; ${esc(r.mobile1)}${r.agreementFile?' &nbsp;|&nbsp; 📎 Agreement':''}</div>
+      <div class="sub">${esc(p?p.name:'(property removed)')}${rentCoveredProps(r).length?' + '+rentCoveredProps(r).map(c=>esc(c.name)).join(' + '):''} &nbsp;|&nbsp; ${esc(r.mobile1)}${r.agreementFile?' &nbsp;|&nbsp; 📎 Agreement':''}</div>
       <div class="sub">Monthly Rent: ₹${esc(r.monthlyRent)} &nbsp;|&nbsp; <span class="badge ${st.badgeClass}">${st.label}</span></div>
     </div>`;
   }).join('');
@@ -1894,7 +1960,7 @@ function renderRentViewBody(){
     <div style="margin-top:8px"><span class="badge ${st.badgeClass}" style="font-size:13px;padding:5px 12px">Account Balance: ${st.label}</span></div>
     <div class="grid2" style="margin-top:10px">
       <div><b>Mobile:</b> ${esc(r.mobile1)} ${r.mobile2?('/ '+esc(r.mobile2)):''}</div>
-      <div><b>EB Number:</b> ${esc(p?p.ebNumber||'-':'-')}</div>
+      ${rentCoversViewHtml(r,p)}
       <div><b>Advance:</b> ₹${esc(r.advanceAmount||0)} on ${esc(r.advanceDate||'-')} (${esc(r.advanceType||'-')})${r.advanceNote?' — '+esc(r.advanceNote):''}</div>
       ${advExtraHtml(r)}
       <div><b>Monthly Rent:</b> ₹${esc(r.monthlyRent)}</div>
