@@ -563,7 +563,14 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
     <div class="sub" id="rentPropInfo" style="margin-top:6px"></div>
   </div>
   <div class="field" id="rentLinkWrap" style="display:none">
-    <label style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="checkbox" id="rentLinkChk" style="width:auto" onchange="rentLinkApply()"><span id="rentLinkLabel"></span></label>
+    <label style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="checkbox" id="rentLinkChk" style="width:auto" onchange="rentLinkApply()"><span>Tenant linked</span></label>
+    <div id="rentLinkPick" style="display:none;margin-top:8px">
+      <label>Linked property</label>
+      <div class="searchsel"><input type="text" id="rentLinkSearch" placeholder="Type to search property..." oninput="rentLinkFilter()" onfocus="rentLinkFilter()">
+        <input type="hidden" id="rentLinkPropId">
+        <div class="opts" id="rentLinkOpts"></div>
+      </div>
+    </div>
     <div class="sub" id="rentLinkSummary" style="display:none;margin-top:6px"></div>
   </div>
   <div class="field" id="rentCoversWrap" style="display:none"><label>Also covers (linked portions)</label>
@@ -1581,7 +1588,8 @@ function selectRentProp(id){
 let editRentCovers=[];
 function rentCoverOptions(mainId,editingRentId){
   const active=loadRents().filter(r=>r.status==='Active' && r.id!==editingRentId);
-  return loadProps().filter(x=>x.linkedTo===mainId && x.status!=='Sold' && !x.ownOccupation).map(function(x){
+  const editing=editingRentId?loadRents().find(r=>r.id===editingRentId):null, keep=new Set((editing&&editing.coversIds)||[]);
+  return loadProps().filter(x=>(x.linkedTo===mainId || keep.has(x.id)) && x.status!=='Sold' && !x.ownOccupation).map(function(x){
     const t=active.find(r=>r.propertyId===x.id) || active.find(r=>(r.coversIds||[]).includes(x.id));
     return {p:x, busy:t?t.tenantName:null};
   });
@@ -1607,42 +1615,77 @@ function rentCoversViewHtml(r,p){
   return `<div><b>EB Numbers:</b> ${esc(p?p.name:'-')} ${esc(p?p.ebNumber||'-':'-')}, ${cov.map(c=>esc(c.name)+' '+esc(c.ebNumber||'-')).join(', ')}</div>
       <div><b>Covers (linked portions):</b> ${cov.map(c=>esc(c.name)).join(', ')}</div>`;
 }
-/* ===================== RENT LINKED WITH THE MAIN TENANT (isolated) =====================
-   Add Tenant -> pick a VACANT linked portion whose main property has an active tenant -> one tick box
-   "Rent linked with <Main> (<Tenant>)". Ticked = no new tenant: the portion joins that tenant's account (coversIds) and only
-   the portion's Materials Given are entered (stored on the main tenant as coverMaterials[portionId]). Not ticked = normal new tenant. */
+/* ===================== TENANT LINKED (isolated) =====================
+   Add Tenant -> pick any VACANT property -> tick "Tenant linked" -> pick the property whose tenant this joins (property names only).
+   Ticked = no new tenant: the property joins that tenant's account (coversIds) and only its Materials Given are entered
+   (stored on that tenant as coverMaterials[propertyId]). Not ticked = normal new tenant. */
 let rentLinkMain=null;
+function rentLinkCandidates(){
+  const pr=selectedRentProp, props=loadProps(), seen=new Set(), out=[];
+  loadRents().filter(r=>r.status==='Active').forEach(function(r){
+    const mp=props.find(x=>x.id===r.propertyId);
+    if(!mp || seen.has(mp.id) || (pr && mp.id===pr.id)) return;
+    seen.add(mp.id); out.push({p:mp,t:r});
+  });
+  return out.sort((a,b)=>a.p.name.localeCompare(b.p.name));
+}
+function rentLinkClear(){
+  rentLinkMain=null;
+  document.getElementById('rentLinkSearch').value=''; document.getElementById('rentLinkPropId').value='';
+  document.getElementById('rentLinkOpts').classList.remove('show');
+}
 function rentLinkSetup(){
-  const wrap=document.getElementById('rentLinkWrap'), chk=document.getElementById('rentLinkChk');
-  const isAdd=!document.getElementById('rentId').value, pr=selectedRentProp;
-  rentLinkMain = (isAdd && pr && pr.linkedTo) ? (loadRents().find(r=>r.status==='Active' && r.propertyId===pr.linkedTo)||null) : null;
-  chk.checked=false;
-  if(rentLinkMain){
-    const mp=loadProps().find(x=>x.id===pr.linkedTo);
-    document.getElementById('rentLinkLabel').textContent='Rent linked with '+(mp?mp.name:'main property')+' ('+rentLinkMain.tenantName+')';
-    wrap.style.display='block';
-  } else wrap.style.display='none';
+  const isAdd=!document.getElementById('rentId').value;
+  document.getElementById('rentLinkChk').checked=false; rentLinkClear();
+  document.getElementById('rentLinkWrap').style.display = (isAdd && selectedRentProp && rentLinkCandidates().length) ? 'block' : 'none';
   rentLinkApply();
 }
-function rentLinkActive(){ return !!(rentLinkMain && document.getElementById('rentLinkChk').checked); }
+function rentLinkActive(){ return document.getElementById('rentLinkWrap').style.display!=='none' && document.getElementById('rentLinkChk').checked; }
 function rentLinkApply(){
-  const on=rentLinkActive(), sum=document.getElementById('rentLinkSummary');
+  const on=rentLinkActive();
   document.getElementById('rentPersonalWrap').style.display = on?'none':'';
   document.getElementById('rentRemarksWrap').style.display = on?'none':'';
+  document.getElementById('rentLinkPick').style.display = on?'block':'none';
   if(on){
     document.getElementById('rentCoversWrap').style.display='none';
-    sum.style.display='block';
-    sum.innerHTML='Tenant: <b>'+esc(rentLinkMain.tenantName)+'</b> &nbsp;|&nbsp; Mobile: '+esc(rentLinkMain.mobile1)+'<br>Rent is included in the main property\'s account - no separate rent / due. Add only the Materials Given below, then Save Tenant.';
-  } else { sum.style.display='none'; rentCoversRender(); }
+    const pr=selectedRentProp;   // shortcut: a portion marked as linked to a main that has a tenant -> pre-select that main
+    if(!rentLinkMain && pr && pr.linkedTo){ const c=rentLinkCandidates().find(x=>x.p.id===pr.linkedTo); if(c) rentLinkPick(c.p.id); }
+    rentLinkSummary();
+  } else { rentLinkClear(); document.getElementById('rentLinkSummary').style.display='none'; rentCoversRender(); }
 }
+function rentLinkFilter(){
+  const search=document.getElementById('rentLinkSearch'), q=search.value.trim().toLowerCase(), box=document.getElementById('rentLinkOpts');
+  const pickedId=document.getElementById('rentLinkPropId').value, picked=rentLinkCandidates().find(c=>c.p.id===pickedId);
+  if(rentLinkMain && (!picked || picked.p.name.toLowerCase()!==q)){ rentLinkMain=null; document.getElementById('rentLinkPropId').value=''; rentLinkSummary(); }
+  const list=rentLinkCandidates().filter(c=>c.p.name.toLowerCase().includes(rentLinkMain?'':q));
+  box.innerHTML = list.map(c=>`<div class="opt" onclick="rentLinkPick(${jsq(c.p.id)})">${esc(c.p.name)}</div>`).join('') || '<div class="opt sub">No property with an active tenant to link</div>';
+  box.classList.add('show');
+}
+function rentLinkPick(propId){
+  const c=rentLinkCandidates().find(x=>x.p.id===propId); if(!c) return;
+  rentLinkMain=c.t;
+  document.getElementById('rentLinkPropId').value=propId; document.getElementById('rentLinkSearch').value=c.p.name;
+  document.getElementById('rentLinkOpts').classList.remove('show');
+  rentLinkSummary();
+}
+function rentLinkSummary(){
+  const sum=document.getElementById('rentLinkSummary'); if(!rentLinkActive()){ sum.style.display='none'; return; }
+  sum.style.display='block';
+  if(!rentLinkMain){ sum.textContent='Select the property whose tenant this joins.'; return; }
+  const mp=loadProps().find(x=>x.id===rentLinkMain.propertyId);
+  sum.innerHTML='Tenant: <b>'+esc(rentLinkMain.tenantName)+'</b> &nbsp;|&nbsp; Mobile: '+esc(rentLinkMain.mobile1)+'<br>Rent is included in '+esc(mp?mp.name:'the main property')+'\'s account - no separate rent / due. Add only the Materials Given below, then Save Tenant.';
+}
+document.addEventListener('click',function(e){ if(!e.target.closest('.searchsel')) document.getElementById('rentLinkOpts').classList.remove('show'); });
 function rentLinkSave(){
   const portion=selectedRentProp;
-  if(!portion||!rentLinkMain){ toast('Select the portion first'); return; }
+  if(!portion){ toast('Select a property'); return; }
+  if(!rentLinkMain){ toast('Select the linked property'); return; }
   let rents=loadRents();
   const t=rents.find(x=>x.id===rentLinkMain.id);
-  if(!t){ toast('Main tenant not found', true); return; }
+  if(!t){ toast('Tenant not found', true); return; }
+  if(t.propertyId===portion.id){ toast('Select a different property to link with', true); return; }
   const taken=rents.some(r=>r.status==='Active' && (r.propertyId===portion.id || (r.coversIds||[]).includes(portion.id)));
-  if(taken){ toast('This portion already has a tenant', true); return; }
+  if(taken){ toast('This property already has a tenant', true); return; }
   t.coversIds=Array.from(new Set((t.coversIds||[]).concat([portion.id])));
   t.coverMaterials=t.coverMaterials||{};
   t.coverMaterials[portion.id]=editRentMaterials.slice();
