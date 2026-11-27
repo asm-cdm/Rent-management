@@ -562,10 +562,15 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
     </div>
     <div class="sub" id="rentPropInfo" style="margin-top:6px"></div>
   </div>
+  <div class="field" id="rentLinkWrap" style="display:none">
+    <label style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="checkbox" id="rentLinkChk" style="width:auto" onchange="rentLinkApply()"><span id="rentLinkLabel"></span></label>
+    <div class="sub" id="rentLinkSummary" style="display:none;margin-top:6px"></div>
+  </div>
   <div class="field" id="rentCoversWrap" style="display:none"><label>Also covers (linked portions)</label>
     <div id="rentCoversList"></div>
     <div class="sub">A covered portion shares this tenant's rent account - it has no separate rent / due account.</div>
   </div>
+  <div id="rentPersonalWrap">
   <div class="field"><label>Tenant Name <span class="req">*</span></label><input type="text" id="rentTenantName"></div>
   <div class="field"><label>Permanent Address</label><textarea id="rentTenantAddr"></textarea></div>
   <div class="grid2">
@@ -593,6 +598,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
     <input type="file" id="rentFileInput" accept="image/*,.pdf" style="display:none" onchange="addRentFile(event)">
     <div class="filethumbs" id="rentFileThumbs"></div>
   </div>
+  </div><!-- /rentPersonalWrap -->
 
   <h3>Materials Given</h3>
   <div class="addrow-inline">
@@ -602,7 +608,7 @@ nav.tabs button.active{color:var(--brand-dk);border-top-color:var(--brand-dk)}
   </div>
   <div class="chiplist" id="rentMaterialsChips"></div>
 
-  <div class="field"><label>Remarks</label><textarea id="rentRemarks"></textarea></div>
+  <div class="field" id="rentRemarksWrap"><label>Remarks</label><textarea id="rentRemarks"></textarea></div>
 
   <div class="modal-actions">
     <button class="btn secondary" onclick="closeModal('rentModalBg')">Cancel</button>
@@ -1545,6 +1551,7 @@ function openRentForm(id){
   renderRentMaterialsChips();
   populateRentMatSelect();
   rentCoversRender();
+  rentLinkSetup();
   openModalEl('rentModalBg');
 }
 function filterPropOpts(){
@@ -1566,6 +1573,7 @@ function selectRentProp(id){
   editRentCovers=[]; rentCoversRender();
   editRentMaterials=[]; renderRentMaterialsChips();
   populateRentMatSelect();
+  rentLinkSetup();
 }
 /* ===================== TENANT COVERS LINKED PORTIONS (isolated) =====================
    One person renting the main property AND its linked portion(s): one tenant record, one rent, one due account.
@@ -1598,6 +1606,56 @@ function rentCoversViewHtml(r,p){
   if(!cov.length) return `<div><b>EB Number:</b> ${esc(p?p.ebNumber||'-':'-')}</div>`;
   return `<div><b>EB Numbers:</b> ${esc(p?p.name:'-')} ${esc(p?p.ebNumber||'-':'-')}, ${cov.map(c=>esc(c.name)+' '+esc(c.ebNumber||'-')).join(', ')}</div>
       <div><b>Covers (linked portions):</b> ${cov.map(c=>esc(c.name)).join(', ')}</div>`;
+}
+/* ===================== RENT LINKED WITH THE MAIN TENANT (isolated) =====================
+   Add Tenant -> pick a VACANT linked portion whose main property has an active tenant -> one tick box
+   "Rent linked with <Main> (<Tenant>)". Ticked = no new tenant: the portion joins that tenant's account (coversIds) and only
+   the portion's Materials Given are entered (stored on the main tenant as coverMaterials[portionId]). Not ticked = normal new tenant. */
+let rentLinkMain=null;
+function rentLinkSetup(){
+  const wrap=document.getElementById('rentLinkWrap'), chk=document.getElementById('rentLinkChk');
+  const isAdd=!document.getElementById('rentId').value, pr=selectedRentProp;
+  rentLinkMain = (isAdd && pr && pr.linkedTo) ? (loadRents().find(r=>r.status==='Active' && r.propertyId===pr.linkedTo)||null) : null;
+  chk.checked=false;
+  if(rentLinkMain){
+    const mp=loadProps().find(x=>x.id===pr.linkedTo);
+    document.getElementById('rentLinkLabel').textContent='Rent linked with '+(mp?mp.name:'main property')+' ('+rentLinkMain.tenantName+')';
+    wrap.style.display='block';
+  } else wrap.style.display='none';
+  rentLinkApply();
+}
+function rentLinkActive(){ return !!(rentLinkMain && document.getElementById('rentLinkChk').checked); }
+function rentLinkApply(){
+  const on=rentLinkActive(), sum=document.getElementById('rentLinkSummary');
+  document.getElementById('rentPersonalWrap').style.display = on?'none':'';
+  document.getElementById('rentRemarksWrap').style.display = on?'none':'';
+  if(on){
+    document.getElementById('rentCoversWrap').style.display='none';
+    sum.style.display='block';
+    sum.innerHTML='Tenant: <b>'+esc(rentLinkMain.tenantName)+'</b> &nbsp;|&nbsp; Mobile: '+esc(rentLinkMain.mobile1)+'<br>Rent is included in the main property\'s account - no separate rent / due. Add only the Materials Given below, then Save Tenant.';
+  } else { sum.style.display='none'; rentCoversRender(); }
+}
+function rentLinkSave(){
+  const portion=selectedRentProp;
+  if(!portion||!rentLinkMain){ toast('Select the portion first'); return; }
+  let rents=loadRents();
+  const t=rents.find(x=>x.id===rentLinkMain.id);
+  if(!t){ toast('Main tenant not found', true); return; }
+  const taken=rents.some(r=>r.status==='Active' && (r.propertyId===portion.id || (r.coversIds||[]).includes(portion.id)));
+  if(taken){ toast('This portion already has a tenant', true); return; }
+  t.coversIds=Array.from(new Set((t.coversIds||[]).concat([portion.id])));
+  t.coverMaterials=t.coverMaterials||{};
+  t.coverMaterials[portion.id]=editRentMaterials.slice();
+  if(!saveRents(rents)) return;
+  const mp=loadProps().find(x=>x.id===t.propertyId);
+  closeModal('rentModalBg'); renderRentList();
+  toast(portion.name+' linked with '+t.tenantName+(mp?' ('+mp.name+')':''));
+}
+/* tenant screen: the materials given for each linked portion */
+function rentCoverMatsViewHtml(r){
+  const cm=r.coverMaterials||{};
+  return rentCoveredProps(r).filter(c=>(cm[c.id]||[]).length).map(c=>
+    '<h3>Materials Given - '+esc(c.name)+'</h3><div class="chiplist">'+cm[c.id].map(m=>'<span class="chip">'+esc(m.name)+' × '+esc(m.qty)+'</span>').join('')+'</div>').join('');
 }
 /* ===================== END TENANT COVERS ===================== */
 function showRentPropInfo(p){
@@ -1670,6 +1728,7 @@ function renderRentFileThumbs(){
   ).join('');
 }
 function saveRent(){
+  if(rentLinkActive()){ rentLinkSave(); return; }
   if(!dvCheckAll([['rentAdvDate','Advance Date'],['rentDueDate','Rent Due Date',{required:true}]])) return;
   const propId=document.getElementById('rentPropId').value;
   const tenantName=document.getElementById('rentTenantName').value.trim();
@@ -1706,6 +1765,7 @@ function saveRent(){
     monthlyRent: monthly,
     dueDate: dueDate,
     coversIds: editRentCovers.slice(),
+    coverMaterials: (function(){ const cm=Object.assign({}, (existing&&existing.coverMaterials)||{}); Object.keys(cm).forEach(function(k){ if(!editRentCovers.includes(k)) delete cm[k]; }); return cm; })(),
     idProofType: document.getElementById('rentIdType').value,
     idProofNo: document.getElementById('rentIdNo').value.trim(),
     files: editRentFiles,
@@ -1967,7 +2027,7 @@ function renderRentViewBody(){
       <div><b>ID Proof:</b> ${esc(r.idProofType)} ${esc(r.idProofNo||'')}</div>
       <div><b>Status:</b> ${r.status}</div>
     </div>
-    <h3>Materials Given</h3><div class="chiplist">${matChips}</div>
+    <h3>Materials Given</h3><div class="chiplist">${matChips}</div>${rentCoverMatsViewHtml(r)}
     <h3>Uploaded Files</h3><div class="chiplist">${fileChips}</div>
     ${r.remarks?`<h3>Remarks</h3><div class="sub">${esc(r.remarks)}</div>`:''}
 
